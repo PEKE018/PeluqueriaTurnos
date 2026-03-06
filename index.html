@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mostaza Peluqueria — Turnos Online</title>
+    <link rel="icon" type="image/png" href="LogoFavicon.png">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- EmailJS for calendar invitations -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+</head>
+<body>
+
+<!-- ===================== PANTALLA CLIENTE ===================== -->
+<div id="app-client">
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-logo">
+            <img src="LogoSF.png" alt="Logo" class="logo-img">
+        </div>
+        <h1 id="shop-name-display">Mostaza Peluqueria</h1>
+        <p class="header-sub">Reservá tu turno online de forma rápida y sencilla</p>
+        <div class="header-decoration">
+            <div class="decoration-dot"></div>
+            <div class="decoration-dot"></div>
+            <div class="decoration-dot"></div>
+        </div>
+    </header>
+
+    <!-- Pasos de reserva -->
+    <main class="booking-container">
+
+        <!-- Paso 1: Servicio -->
+        <section class="step" id="step-service">
+            <h2 class="step-title">Elegí un servicio</h2>
+            <div class="cards-grid" id="services-list"></div>
+        </section>
+
+        <!-- Paso 2: Estilista -->
+        <section class="step hidden" id="step-stylist">
+            <h2 class="step-title">Elegí un profesional</h2>
+            <div class="cards-grid" id="stylists-list"></div>
+            <button type="button" class="btn-back" onclick="goToStep('step-service')">← Volver</button>
+        </section>
+
+        <!-- Paso 3: Fecha y hora -->
+        <section class="step hidden" id="step-datetime">
+            <h2 class="step-title" id="datetime-title">Elegí fecha y hora</h2>
+            
+            <!-- Calendario Personalizado -->
+            <div class="custom-calendar">
+                <div class="calendar-header">
+                    <button class="calendar-nav-btn" onclick="changeMonth(-1)" type="button">‹</button>
+                    <h3 class="calendar-month-year" id="calendar-month-year"></h3>
+                    <button class="calendar-nav-btn" onclick="changeMonth(1)" type="button">›</button>
+                </div>
+                <div class="calendar-weekdays">
+                    <div>Dom</div>
+                    <div>Lun</div>
+                    <div>Mar</div>
+                    <div>Mié</div>
+                    <div>Jue</div>
+                    <div>Vie</div>
+                    <div>Sáb</div>
+                </div>
+                <div class="calendar-days" id="calendar-days"></div>
+                <input type="hidden" id="booking-date">
+            </div>
+            
+            <div id="time-slots-container" class="time-slots-grid"></div>
+            <button type="button" class="btn-back" onclick="goBackFromDateTime()">← Volver</button>
+        </section>
+
+        <!-- Paso 4: Datos del cliente -->
+        <section class="step hidden" id="step-client">
+            <h2 class="step-title">4. Tus datos</h2>
+            <div class="form-group">
+                <label for="client-name">Nombre completo</label>
+                <input type="text" id="client-name" class="input-field" placeholder="Tu nombre" maxlength="100">
+            </div>
+            <div class="form-group">
+                <label for="client-email">Email</label>
+                <input type="email" id="client-email" class="input-field" placeholder="tu@email.com" maxlength="100">
+            </div>
+            <div class="form-group">
+                <label for="client-phone">Teléfono / WhatsApp</label>
+                <input type="tel" id="client-phone" class="input-field" placeholder="Ej: 11-2345-6789" maxlength="20">
+            </div>
+            <div class="booking-summary" id="booking-summary"></div>
+            <button type="button" class="btn-primary" onclick="confirmBooking()">Confirmar Turno</button>
+            <button type="button" class="btn-back" onclick="goToStep('step-datetime')">← Volver</button>
+        </section>
+
+        <!-- Confirmación -->
+        <section class="step hidden" id="step-confirmation">
+            <div class="confirmation-box">
+                <div class="confirmation-icon">
+                    <svg viewBox="0 0 24 24" width="64" height="64" fill="currentColor">
+                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                    </svg>
+                </div>
+                <h2>¡Turno Confirmado!</h2>
+                <div id="confirmation-details"></div>
+                <button type="button" class="btn-primary" onclick="resetBooking()">Reservar otro turno</button>
+            </div>
+        </section>
+
+        <!-- Consulta de turno -->
+        <section class="check-booking-section">
+            <h3>¿Ya tenés un turno?</h3>
+            <div class="form-group">
+                <input type="tel" id="check-phone" class="input-field" placeholder="Ingresá tu teléfono" maxlength="20">
+                <button type="button" class="btn-secondary" onclick="checkMyBookings()">Consultar mis turnos</button>
+            </div>
+            <div id="my-bookings-result"></div>
+        </section>
+
+        <!-- Información de contacto y ubicación -->
+        <section class="contact-section">
+            <h3>Contacto y Ubicación</h3>
+            
+            <div class="contact-grid">
+                <a href="https://www.instagram.com/mostazapeluqueriaunisex/" target="_blank" class="contact-card">
+                    <div class="contact-icon instagram">
+                        <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
+                            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                        </svg>
+                    </div>
+                    <div class="contact-info">
+                        <h4>Instagram</h4>
+                        <p>@mostazapeluqueriaunisex</p>
+                    </div>
+                </a>
+
+                <a href="https://wa.me/5493537332152" target="_blank" class="contact-card">
+                    <div class="contact-icon whatsapp">
+                        <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                        </svg>
+                    </div>
+                    <div class="contact-info">
+                        <h4>WhatsApp - Nesti</h4>
+                        <p>+54 9 3537 33-2152</p>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Mapa de Google -->
+            <div class="map-container">
+                <h4>Nuestra Ubicación</h4>
+                <div id="google-map" class="map-frame">
+                    <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1531.5562810042254!2d-62.853498621317435!3d-33.152491379982045!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x95ceca94136ff71d%3A0xe3c335f9304e22e0!2sMostaza%20Peluquer%C3%ADa%20Masculina!5e0!3m2!1ses-419!2sar!4v1772763574867!5m2!1ses-419!2sar" 
+                            width="600" height="450" style="border:0;" 
+                            allowfullscreen="" loading="lazy" 
+                            referrerpolicy="no-referrer-when-downgrade">
+                    </iframe>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer con ícono de tuerca -->
+    <footer class="footer">
+        <p>&copy; <span id="footer-year"></span> <span id="footer-shop-name">Mostaza Peluqueria</span></p>
+        <button class="admin-gear-btn" onclick="showAdminLogin()" title="Administración">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"/>
+            </svg>
+        </button>
+    </footer>
+</div>
+
+<!-- ===================== MODAL LOGIN ADMIN ===================== -->
+<div class="modal-overlay hidden" id="admin-login-modal">
+    <div class="modal-card">
+        <button class="modal-close" onclick="closeModal('admin-login-modal')">&times;</button>
+        <h2>Acceso Administración</h2>
+        <div class="form-group">
+            <label for="admin-password">Contraseña</label>
+            <input type="password" id="admin-password" class="input-field" placeholder="Ingresá la contraseña" maxlength="50">
+        </div>
+        <p class="error-msg hidden" id="login-error">Contraseña incorrecta</p>
+        <button class="btn-primary" onclick="adminLogin()">Ingresar</button>
+    </div>
+</div>
+
+<!-- ===================== PANEL ADMIN ===================== -->
+<div id="app-admin" class="hidden">
+
+    <header class="header admin-header">
+        <div class="admin-header-content">
+            <div class="admin-logo">
+                <img src="LogoSF.png" alt="Logo" class="logo-img-admin">
+                <span class="admin-badge-text">Admin</span>
+            </div>
+            <h1>Panel de Administración</h1>
+        </div>
+        <button class="btn-logout" onclick="adminLogout()">Cerrar sesión</button>
+    </header>
+
+    <nav class="admin-nav">
+        <button class="admin-tab active" data-tab="tab-appointments" onclick="switchTab(this)">Turnos</button>
+        <button class="admin-tab" data-tab="tab-services" onclick="switchTab(this)">Servicios</button>
+        <button class="admin-tab" data-tab="tab-stylists" onclick="switchTab(this)">Profesionales</button>
+        <button class="admin-tab" data-tab="tab-availability" onclick="switchTab(this)">Disponibilidad</button>
+        <button class="admin-tab" data-tab="tab-settings" onclick="switchTab(this)">Configuración</button>
+    </nav>
+
+    <main class="admin-content">
+
+        <!-- Tab: Turnos -->
+        <section class="admin-tab-content" id="tab-appointments">
+            <div class="admin-section-header">
+                <h2>Gestión de Turnos</h2>
+                <div class="filter-row">
+                    <label>Filtrar por fecha:</label>
+                    <input type="date" id="filter-date" class="input-field input-sm" onchange="renderAdminAppointments()">
+                    <button class="btn-secondary btn-sm" onclick="clearFilterDate()">Todos</button>
+                </div>
+            </div>
+            <div class="table-wrapper">
+                <table class="admin-table" id="appointments-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Hora</th>
+                            <th>Cliente</th>
+                            <th>Teléfono</th>
+                            <th>Servicio</th>
+                            <th>Profesional</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="appointments-tbody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Tab: Servicios -->
+        <section class="admin-tab-content hidden" id="tab-services">
+            <div class="admin-section-header">
+                <h2>Servicios</h2>
+                <button class="btn-primary btn-sm" onclick="showServiceForm()">+ Agregar Servicio</button>
+            </div>
+            <div class="table-wrapper">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Duración</th>
+                            <th>Precio</th>
+                            <th>Imagen</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="services-tbody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Tab: Profesionales -->
+        <section class="admin-tab-content hidden" id="tab-stylists">
+            <div class="admin-section-header">
+                <h2>Profesionales</h2>
+                <button class="btn-primary btn-sm" onclick="showStylistForm()">+ Agregar Profesional</button>
+            </div>
+            <div class="table-wrapper">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Email</th>
+                            <th>Estado</th>
+                            <th>Google Calendar</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stylists-tbody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Tab: Disponibilidad -->
+        <section class="admin-tab-content hidden" id="tab-availability">
+            <h2>Gestionar Disponibilidad</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+                Bloqueá días completos o horarios específicos. Los clientes verán estos espacios como no disponibles.
+            </p>
+            
+            <div class="form-group" style="max-width: 400px; margin-bottom: 2rem;">
+                <label for="availability-stylist">Profesional</label>
+                <select id="availability-stylist" class="input-field" onchange="renderAvailabilityCalendar()">
+                    <option value="">Seleccioná un profesional</option>
+                </select>
+            </div>
+            
+            <div id="availability-calendar-wrapper" class="hidden">
+                <!-- Calendario Personalizado para Admin -->
+                <div class="custom-calendar">
+                    <div class="calendar-header">
+                        <button class="calendar-nav-btn" onclick="changeAvailabilityMonth(-1)" type="button">‹</button>
+                        <h3 class="calendar-month-year" id="availability-month-year"></h3>
+                        <button class="calendar-nav-btn" onclick="changeAvailabilityMonth(1)" type="button">›</button>
+                    </div>
+                    <div class="calendar-weekdays">
+                        <div>Dom</div>
+                        <div>Lun</div>
+                        <div>Mar</div>
+                        <div>Mié</div>
+                        <div>Jue</div>
+                        <div>Vie</div>
+                        <div>Sáb</div>
+                    </div>
+                    <div class="calendar-days" id="availability-calendar-days"></div>
+                </div>
+                
+                <!-- Lista de bloqueos actuales -->
+                <div style="margin-top: 2rem;">
+                    <h3 style="margin-bottom: 1rem;">Bloqueos Actuales</h3>
+                    <div id="blocks-list"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab: Configuración -->
+        <section class="admin-tab-content hidden" id="tab-settings">
+            <h2>Configuración General</h2>
+            <div class="settings-form">
+                <div class="form-group">
+                    <label for="setting-shop-name">Nombre del local</label>
+                    <input type="text" id="setting-shop-name" class="input-field" maxlength="100">
+                </div>
+                <div class="form-group">
+                    <label for="setting-password">Contraseña de administración</label>
+                    <input type="password" id="setting-password" class="input-field" maxlength="50">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="setting-open-time">Hora de apertura</label>
+                        <input type="time" id="setting-open-time" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label for="setting-close-time">Hora de cierre</label>
+                        <input type="time" id="setting-close-time" class="input-field">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="setting-interval">Intervalo de turnos (minutos)</label>
+                    <input type="number" id="setting-interval" class="input-field" min="10" max="120" step="5">
+                </div>
+                <div class="form-group">
+                    <label>Días laborales</label>
+                    <div class="days-checkboxes" id="working-days-checks"></div>
+                </div>
+                <button class="btn-primary" onclick="saveSettings()">Guardar Configuración</button>
+            </div>
+
+            <!-- SECCIÓN TÉCNICA (Solo Desarrollo) -->
+            <div class="technical-section">
+                <div class="technical-header">
+                    <h2>⚙️ CONFIGURACIÓN TÉCNICA</h2>
+                </div>
+                <div class="technical-warning">
+                    <strong>⚠️ Solo para Desarrollo / Programador</strong>
+                    Esta sección contiene configuraciones técnicas que deben realizarse una sola vez durante la instalación inicial.
+                    <strong>El profesional NO debe modificar estos valores durante el uso normal del sistema.</strong>
+                </div>
+
+            <h2 style="margin-top: 1.5rem;">Integración Email (EmailJS)</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                Configurá EmailJS para enviar invitaciones de calendario automáticamente a clientes y profesionales.
+                <a href="https://www.emailjs.com/" target="_blank" style="color: var(--primary);">Crear cuenta en EmailJS (gratis)</a>
+            </p>
+            <div class="settings-form">
+                <div class="form-group">
+                    <label for="emailjs-service-id">Service ID</label>
+                    <input type="text" id="emailjs-service-id" class="input-field" placeholder="service_xxxxxxx" maxlength="50">
+                </div>
+                <div class="form-group">
+                    <label for="emailjs-template-id">Template ID</label>
+                    <input type="text" id="emailjs-template-id" class="input-field" placeholder="template_xxxxxxx" maxlength="50">
+                </div>
+                <div class="form-group">
+                    <label for="emailjs-public-key">Public Key</label>
+                    <input type="text" id="emailjs-public-key" class="input-field" placeholder="xxxxxxxxxxxx" maxlength="50">
+                </div>
+                <button class="btn-primary" onclick="saveEmailJSSettings()">Guardar Integración</button>
+                <button class="btn-secondary" onclick="testEmailJSConnection()" style="margin-left: 0.5rem;">Probar Conexión</button>
+            </div>
+
+            <h2 style="margin-top: 2rem;">Backend & Google Calendar API</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                Configurá la URL del servidor backend para integración automática con Google Calendar.
+                Los profesionales deben autorizar sus cuentas desde la pestaña "Profesionales".
+            </p>
+            <div class="settings-form">
+                <div class="form-group">
+                    <label for="backend-url">URL del Backend</label>
+                    <input type="text" id="backend-url" class="input-field" 
+                           placeholder="http://localhost:3000 o https://tubackend.com" 
+                           maxlength="200">
+                    <small style="display: block; margin-top: 0.5rem; color: var(--text-muted);">
+                        Para desarrollo local: http://localhost:3000<br>
+                        Para producción: URL de tu servidor desplegado (Railway, Render, Heroku, etc.)
+                    </small>
+                </div>
+                <button class="btn-primary" onclick="saveBackendSettings()">Guardar URL Backend</button>
+                <button class="btn-secondary" onclick="testBackendConnection()" style="margin-left: 0.5rem;">Probar Conexión</button>
+            </div>
+            
+            </div>
+            <!-- FIN SECCIÓN TÉCNICA -->
+        </section>
+
+    </main>
+</div>
+
+<!-- ===================== MODAL FORM GENÉRICO ===================== -->
+<div class="modal-overlay hidden" id="form-modal">
+    <div class="modal-card">
+        <button class="modal-close" onclick="closeModal('form-modal')">&times;</button>
+        <h2 id="form-modal-title">Formulario</h2>
+        <div id="form-modal-body"></div>
+    </div>
+</div>
+
+<!-- ===================== MODAL BLOQUEO DE HORARIOS ===================== -->
+<div class="modal-overlay hidden" id="block-times-modal">
+    <div class="modal-card" style="max-width: 600px;">
+        <button class="modal-close" onclick="closeModal('block-times-modal')">&times;</button>
+        <h2 id="block-modal-title">Gestionar Disponibilidad</h2>
+        <p id="block-modal-date" style="color: var(--text-secondary); margin-bottom: 1rem;"></p>
+        
+        <div style="margin-bottom: 1.5rem;">
+            <button class="btn-primary" onclick="blockFullDay()" style="margin-right: 0.5rem;">🚫 Bloquear Todo el Día</button>
+            <button class="btn-secondary" onclick="closeModal('block-times-modal')">Cancelar</button>
+        </div>
+        
+        <hr style="margin: 1.5rem 0; border: none; border-top: 1px solid var(--border);">
+        
+        <h3 style="margin-bottom: 1rem;">O bloqueá horarios específicos:</h3>
+        <div id="admin-time-slots" class="time-slots-grid" style="margin-bottom: 1rem;"></div>
+        
+        <button class="btn-primary" onclick="saveTimeBlocks()">Guardar Bloqueos</button>
+    </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

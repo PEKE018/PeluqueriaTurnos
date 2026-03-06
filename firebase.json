@@ -1,0 +1,24 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "**/*.md",
+      "CONFIGURACION-EMAILJS.md",
+      "README.md",
+      ".firebaserc",
+      ".firebase/**",
+      "y/**",
+      "backend/**",
+      "*.bat"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
