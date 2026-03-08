@@ -8,7 +8,7 @@
     // ---------- BACKEND CONFIGURATION ----------
     const BACKEND_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
         ? 'http://localhost:3000'
-        : 'https://peluqueriaturns.up.railway.app';
+        : 'https://peluqueriaturnos.onrender.com';
 
     // ---------- DEFAULT DATA ----------
     const DEFAULT_SETTINGS = {
