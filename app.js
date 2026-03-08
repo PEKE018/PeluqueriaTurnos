@@ -615,15 +615,27 @@
     };
 
     window.cancelMyBooking = function (id) {
-        if (!confirm('¿Seguro que querés cancelar este turno?')) return;
         const appointments = getAppointments();
         const apt = appointments.find(a => a.id === id);
-        if (apt) {
-            apt.status = 'cancelled';
-            saveAppointments(appointments);
-            showToast('Turno cancelado', 'success');
-            window.checkMyBookings();
+        
+        if (!apt) return;
+        
+        // Validar 48 horas de anticipación
+        const appointmentDateTime = new Date(apt.date + 'T' + apt.time);
+        const now = new Date();
+        const hoursUntilAppointment = (appointmentDateTime - now) / (1000 * 60 * 60);
+        
+        if (hoursUntilAppointment < 48) {
+            showToast('No se puede cancelar turnos con menos de 48 horas de anticipación', 'error');
+            return;
         }
+        
+        if (!confirm('¿Seguro que querés cancelar este turno?')) return;
+        
+        apt.status = 'cancelled';
+        saveAppointments(appointments);
+        showToast('Turno cancelado', 'success');
+        window.checkMyBookings();
     };
 
     function statusLabel(status) {
