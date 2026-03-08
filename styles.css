@@ -1897,38 +1897,71 @@ body {
 
 /* ========== SETTINGS ========== */
 .settings-form {
-    max-width: 500px;
+    max-width: 900px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    background: var(--bg-card);
+    padding: 2rem;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.settings-form .form-group:nth-child(5),
+.settings-form .form-group:nth-child(6),
+.btn-settings-save {
+    grid-column: 1 / -1;
+}
+
+.btn-settings-save {
+    width: 100%;
+    padding: 1rem 2rem;
+    font-size: 1.05rem;
 }
 
 .days-checkboxes {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 0.3rem;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.7rem;
+    margin-top: 0.5rem;
 }
 
 .day-check {
     display: flex;
     align-items: center;
-    gap: 0.3rem;
+    justify-content: center;
+    gap: 0.4rem;
     background: var(--bg-secondary);
-    padding: 0.4rem 0.8rem;
+    padding: 0.6rem 0.8rem;
     border-radius: var(--radius-sm);
-    font-size: 0.85rem;
+    font-size: 0.9rem;
+    font-weight: 500;
     cursor: pointer;
     user-select: none;
-    transition: var(--transition);
+    transition: all var(--transition);
+    border: 2px solid transparent;
     border: 1px solid var(--border);
 }
 
 .day-check:hover {
-    background: var(--border);
-    border-color: var(--primary-light);
+    background: var(--bg-secondary);
+    border-color: var(--primary);
+    transform: translateY(-2px);
+}
+
+.day-check input:checked {
+    accent-color: var(--primary);
 }
 
 .day-check input:checked + span {
     color: var(--primary);
-    font-weight: 600;
+    font-weight: 700;
+}
+
+.day-check input:checked {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white;
 }
 
 /* ========== TECHNICAL SECTION ========== */
@@ -2091,6 +2124,15 @@ body {
     }
     .form-row { 
         grid-template-columns: 1fr; 
+    }
+    .settings-form {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        padding: 1.5rem;
+    }
+    .settings-form .form-group:nth-child(5),
+    .settings-form .form-group:nth-child(6) {
+        grid-column: auto;
     }
     .admin-header { 
         flex-direction: column;
