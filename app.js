@@ -982,13 +982,15 @@
                     ${s.calendarConnected && s.calendarEmail ? `<br><small style="color:var(--text-muted)">${sanitize(s.calendarEmail)}</small>` : ''}
                 </td>
                 <td class="actions">
-                    <button class="btn-warning" onclick="editStylist(${s.id})">Editar</button>
-                    <button class="btn-secondary btn-sm" onclick="toggleStylist(${s.id})">${s.active ? 'Desactivar' : 'Activar'}</button>
-                    ${!s.calendarConnected ? 
-                        `<button class="btn-success btn-sm" onclick="connectStylistCalendar(${s.id})">📅 Conectar Calendario</button>` : 
-                        `<button class="btn-danger btn-sm" onclick="disconnectStylistCalendar(${s.id})">🔌 Desconectar</button>`
-                    }
-                    <button class="btn-danger" onclick="deleteStylist(${s.id})">Eliminar</button>
+                    <div class="actions-grid">
+                        <button class="btn-action btn-warning" onclick="editStylist(${s.id})">Editar</button>
+                        <button class="btn-action btn-secondary" onclick="toggleStylist(${s.id})">${s.active ? 'Desactivar' : 'Activar'}</button>
+                        ${!s.calendarConnected ? 
+                            `<button class="btn-action btn-success" onclick="connectStylistCalendar(${s.id})">📅 Conectar Calendario</button>` : 
+                            `<button class="btn-action btn-danger-alt" onclick="disconnectStylistCalendar(${s.id})">🔌 Desconectar</button>`
+                        }
+                        <button class="btn-action btn-danger" onclick="deleteStylist(${s.id})">Eliminar</button>
+                    </div>
                 </td>
             </tr>
         `).join('');
