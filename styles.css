@@ -358,11 +358,12 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1.5rem 2rem;
-    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-dark) 50%, var(--navy) 100%);
-    box-shadow: var(--shadow-lg);
+    padding: 1.5rem 2.5rem;
+    background: linear-gradient(135deg, var(--navy) 0%, #1a4d7a 50%, var(--navy-dark) 100%);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
     position: relative;
     overflow: hidden;
+    border-bottom: 3px solid var(--primary);
 }
 
 .admin-header::before {
@@ -372,20 +373,20 @@ body {
     left: -100%;
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(212, 160, 36, 0.1), transparent);
-    animation: shimmer 3s ease-in-out infinite;
+    background: radial-gradient(circle at 20% 50%, rgba(244, 208, 63, 0.15) 0%, transparent 50%);
+    animation: shift 6s ease-in-out infinite;
 }
 
-@keyframes shimmer {
-    0% { left: -100%; }
-    100% { left: 200%; }
+@keyframes shift {
+    0%, 100% { left: -50%; }
+    50% { left: 50%; }
 }
 
 .admin-header-content {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.3rem;
+    flex-direction: row;
+    align-items: center;
+    gap: 1.2rem;
     position: relative;
     z-index: 1;
 }
@@ -394,72 +395,53 @@ body {
 .admin-logo {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.5rem;
-    background: rgba(212, 160, 36, 0.2);
-    padding: 0.3rem 1rem 0.3rem 0.5rem;
+    background: linear-gradient(135deg, rgba(244, 208, 63, 0.25), rgba(212, 160, 36, 0.15));
+    padding: 0.5rem 1.2rem;
     border-radius: 50px;
-    border: 1px solid rgba(212, 160, 36, 0.4);
+    border: 2px solid rgba(212, 160, 36, 0.5);
     backdrop-filter: blur(10px);
-    margin-right: 0.75rem;
+    box-shadow: 0 4px 15px rgba(212, 160, 36, 0.2);
+    transition: all var(--transition);
+}
+
+.admin-logo:hover {
+    background: linear-gradient(135deg, rgba(244, 208, 63, 0.35), rgba(212, 160, 36, 0.25));
+    border-color: rgba(212, 160, 36, 0.7);
+    box-shadow: 0 6px 20px rgba(212, 160, 36, 0.3);
+    transform: translateY(-2px);
 }
 
 .logo-img-admin {
-    height: 32px;
+    height: 36px;
     width: auto;
-    max-width: 80px;
+    max-width: 90px;
     object-fit: contain;
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
 .admin-badge-text {
     color: var(--primary);
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.5px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 1px;
     text-transform: uppercase;
-}
-
-/* Legacy admin badge styles (kept for backwards compatibility) */
-.admin-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    background: rgba(212, 160, 36, 0.2);
-    color: var(--primary);
-    padding: 0.25rem 0.8rem;
-    border-radius: 50px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-    border: 1px solid rgba(212, 160, 36, 0.4);
-    backdrop-filter: blur(10px);
-}
-
-.admin-badge svg {
-    flex-shrink: 0;
-}
-
-@media (prefers-color-scheme: dark) {
-    .admin-logo {
-        background: rgba(244, 208, 63, 0.25);
-        border-color: rgba(244, 208, 63, 0.5);
-    }
-    
-    .admin-badge {
-        background: rgba(244, 208, 63, 0.25);
-        border-color: rgba(244, 208, 63, 0.5);
-    }
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .admin-header h1 {
-    font-size: 1.4rem;
-    font-weight: 700;
+    font-size: 1.6rem;
+    font-weight: 800;
     color: white;
-    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+    text-shadow: 0 3px 15px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.2);
     letter-spacing: 0.5px;
     position: relative;
     z-index: 1;
+    margin: 0;
 }
 
 /* ========== FOOTER ========== */
@@ -1199,19 +1181,29 @@ body {
 }
 
 .btn-logout {
-    background: rgba(255,255,255,0.15);
+    background: linear-gradient(135deg, rgba(230, 57, 70, 0.85), rgba(194, 24, 36, 0.8));
     color: white;
-    border: 1px solid rgba(255,255,255,0.3);
-    padding: 0.4rem 1rem;
-    border-radius: var(--radius-sm);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 0.65rem 1.4rem;
+    border-radius: var(--radius-md);
     cursor: pointer;
     font-family: inherit;
-    font-size: 0.85rem;
-    transition: var(--transition);
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all var(--transition);
+    box-shadow: 0 4px 15px rgba(230, 57, 70, 0.3);
+    position: relative;
+    z-index: 2;
 }
 
 .btn-logout:hover {
-    background: rgba(255,255,255,0.25);
+    background: linear-gradient(135deg, rgba(230, 57, 70, 1), rgba(194, 24, 36, 1));
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(230, 57, 70, 0.5);
+}
+
+.btn-logout:active {
+    transform: translateY(0);
 }
 
 .btn-danger {
@@ -2006,19 +1998,21 @@ body {
 }
 
 .technical-warning {
-    background: rgba(212, 160, 36, 0.1);
-    border-left: 4px solid var(--warning);
-    padding: 1rem;
+    background: linear-gradient(135deg, rgba(212, 160, 36, 0.15), rgba(244, 208, 63, 0.08));
+    border-left: 5px solid var(--warning);
+    border-radius: var(--radius-md);
+    padding: 1.2rem;
     margin-bottom: 1.5rem;
-    border-radius: var(--radius-sm);
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     color: var(--text-light);
+    box-shadow: 0 2px 12px rgba(212, 160, 36, 0.12);
 }
 
 .technical-warning strong {
     color: var(--warning);
     display: block;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.6rem;
+    font-size: 1rem;
 }
 
 @media (prefers-color-scheme: dark) {

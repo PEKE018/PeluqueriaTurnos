@@ -202,7 +202,7 @@
             </div>
             <h1>Panel de Administración</h1>
         </div>
-        <button class="btn-logout" onclick="adminLogout()">Cerrar sesión</button>
+        <button class="btn-logout" id="btn-logout-main" onclick="handleLogoutClick()">Cerrar sesión</button>
     </header>
 
     <nav class="admin-nav">
@@ -362,7 +362,7 @@
             </div>
 
             <!-- SECCIÓN TÉCNICA (Solo Desarrollo) -->
-            <div class="technical-section">
+            <div class="technical-section hidden" id="technical-section">
                 <div class="technical-header">
                     <h2>⚙️ CONFIGURACIÓN TÉCNICA</h2>
                 </div>
@@ -372,48 +372,25 @@
                     <strong>El profesional NO debe modificar estos valores durante el uso normal del sistema.</strong>
                 </div>
 
-            <h2 style="margin-top: 1.5rem;">Integración Email (EmailJS)</h2>
-            <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
-                Configurá EmailJS para enviar invitaciones de calendario automáticamente a clientes y profesionales.
-                <a href="https://www.emailjs.com/" target="_blank" style="color: var(--primary);">Crear cuenta en EmailJS (gratis)</a>
-            </p>
-            <div class="settings-form">
-                <div class="form-group">
-                    <label for="emailjs-service-id">Service ID</label>
-                    <input type="text" id="emailjs-service-id" class="input-field" placeholder="service_xxxxxxx" maxlength="50">
+                <h2 style="margin-top: 2rem;">Backend & Google Calendar API</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                    Configurá la URL del servidor backend para integración automática con Google Calendar.
+                    Los profesionales deben autorizar sus cuentas desde la pestaña "Profesionales".
+                </p>
+                <div class="settings-form">
+                    <div class="form-group">
+                        <label for="backend-url">URL del Backend</label>
+                        <input type="text" id="backend-url" class="input-field" 
+                               placeholder="http://localhost:3000 o https://tubackend.com" 
+                               maxlength="200">
+                        <small style="display: block; margin-top: 0.5rem; color: var(--text-muted);">
+                            Para desarrollo local: http://localhost:3000<br>
+                            Para producción: URL de tu servidor desplegado (Railway, Render, Heroku, etc.)
+                        </small>
+                    </div>
+                    <button class="btn-primary" onclick="saveBackendSettings()">Guardar URL Backend</button>
+                    <button class="btn-secondary" onclick="testBackendConnection()" style="margin-left: 0.5rem;">Probar Conexión</button>
                 </div>
-                <div class="form-group">
-                    <label for="emailjs-template-id">Template ID</label>
-                    <input type="text" id="emailjs-template-id" class="input-field" placeholder="template_xxxxxxx" maxlength="50">
-                </div>
-                <div class="form-group">
-                    <label for="emailjs-public-key">Public Key</label>
-                    <input type="text" id="emailjs-public-key" class="input-field" placeholder="xxxxxxxxxxxx" maxlength="50">
-                </div>
-                <button class="btn-primary" onclick="saveEmailJSSettings()">Guardar Integración</button>
-                <button class="btn-secondary" onclick="testEmailJSConnection()" style="margin-left: 0.5rem;">Probar Conexión</button>
-            </div>
-
-            <h2 style="margin-top: 2rem;">Backend & Google Calendar API</h2>
-            <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
-                Configurá la URL del servidor backend para integración automática con Google Calendar.
-                Los profesionales deben autorizar sus cuentas desde la pestaña "Profesionales".
-            </p>
-            <div class="settings-form">
-                <div class="form-group">
-                    <label for="backend-url">URL del Backend</label>
-                    <input type="text" id="backend-url" class="input-field" 
-                           placeholder="http://localhost:3000 o https://tubackend.com" 
-                           maxlength="200">
-                    <small style="display: block; margin-top: 0.5rem; color: var(--text-muted);">
-                        Para desarrollo local: http://localhost:3000<br>
-                        Para producción: URL de tu servidor desplegado (Railway, Render, Heroku, etc.)
-                    </small>
-                </div>
-                <button class="btn-primary" onclick="saveBackendSettings()">Guardar URL Backend</button>
-                <button class="btn-secondary" onclick="testBackendConnection()" style="margin-left: 0.5rem;">Probar Conexión</button>
-            </div>
-            
             </div>
             <!-- FIN SECCIÓN TÉCNICA -->
         </section>
@@ -448,6 +425,14 @@
         <div id="admin-time-slots" class="time-slots-grid" style="margin-bottom: 1rem;"></div>
         
         <button class="btn-primary" onclick="saveTimeBlocks()">Guardar Bloqueos</button>
+    </div>
+</div>
+
+<!-- ===================== MODAL CONFIGURACIÓN TÉCNICA (OCULTO) ===================== -->
+<div class="modal-overlay hidden" id="technical-config-modal">
+    <div class="modal-card" style="max-width: 700px; max-height: 90vh; overflow-y: auto;">
+        <button class="modal-close" onclick="closeModal('technical-config-modal')">&times;</button>
+        <div id="technical-section-copy"></div>
     </div>
 </div>
 

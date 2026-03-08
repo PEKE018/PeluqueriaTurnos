@@ -674,6 +674,40 @@
         });
     });
 
+    // Contador de clicks para configuración técnica
+    let logoutClickCount = 0;
+    let logoutClickTimer = null;
+
+    window.handleLogoutClick = function () {
+        logoutClickCount++;
+        
+        // Resetear contador después de 3 segundos sin clicks
+        clearTimeout(logoutClickTimer);
+        logoutClickTimer = setTimeout(() => {
+            logoutClickCount = 0;
+        }, 3000);
+
+        // Si llega a 5 clicks, mostrar configuración técnica
+        if (logoutClickCount === 5) {
+            logoutClickCount = 0;
+            showTechnicalConfig();
+            return;
+        }
+
+        // Si llega a 6 clicks (después de ver la config), hacer logout
+        if (logoutClickCount === 6) {
+            logoutClickCount = 0;
+            window.adminLogout();
+        }
+    };
+
+    window.showTechnicalConfig = function () {
+        const technicalSection = $('technical-section');
+        const copy = technicalSection.innerHTML;
+        $('technical-section-copy').innerHTML = copy;
+        $('technical-config-modal').classList.remove('hidden');
+    };
+
     window.adminLogout = function () {
         $('app-admin').classList.add('hidden');
         $('app-client').classList.remove('hidden');
