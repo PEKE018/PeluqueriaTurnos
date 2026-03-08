@@ -721,27 +721,34 @@
     // Contador de clicks para configuración técnica
     let logoutClickCount = 0;
     let logoutClickTimer = null;
+    let technicalConfigShown = false;
 
     window.handleLogoutClick = function () {
         logoutClickCount++;
         
-        // Resetear contador después de 3 segundos sin clicks
-        clearTimeout(logoutClickTimer);
-        logoutClickTimer = setTimeout(() => {
-            logoutClickCount = 0;
-        }, 3000);
-
-        // Si llega a 5 clicks, mostrar configuración técnica
-        if (logoutClickCount === 5) {
-            logoutClickCount = 0;
-            showTechnicalConfig();
+        // Si el modal de config técnica está abierto, cerrar y hacer logout
+        if (technicalConfigShown) {
+            window.adminLogout();
             return;
         }
 
-        // Si llega a 6 clicks (después de ver la config), hacer logout
-        if (logoutClickCount === 6) {
+        // Resetear contador después de 2 segundos sin clicks
+        clearTimeout(logoutClickTimer);
+        logoutClickTimer = setTimeout(() => {
+            // Si no llegó a 5 clicks, hacer logout normal
+            if (logoutClickCount < 5) {
+                window.adminLogout();
+            } else {
+                // Si llegó a 5 clicks, mostrar config técnica
+                technicalConfigShown = true;
+                showTechnicalConfig();
+            }
             logoutClickCount = 0;
-            window.adminLogout();
+        }, 2000);
+
+        // Visual feedback: si llega a 5 clicks rápido, prepara para mostrar config
+        if (logoutClickCount === 5) {
+            clearTimeout(logoutClickTimer);
         }
     };
 
@@ -760,6 +767,10 @@
 
     window.closeModal = function (id) {
         $(id).classList.add('hidden');
+        // Resetear estado si cerraron el modal de configuración técnica
+        if (id === 'technical-config-modal') {
+            technicalConfigShown = false;
+        }
     };
 
     // ============================================================
