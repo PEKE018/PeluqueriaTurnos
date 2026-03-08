@@ -602,16 +602,20 @@
             return;
         }
 
-        container.innerHTML = appointments.map(a => `
+        container.innerHTML = appointments.map(a => {
+            const realStatus = getAppointmentStatus(a);
+            const canCancel = realStatus === 'pending' || realStatus === 'confirmed';
+            return `
             <div class="my-booking-card">
                 <div class="info">
                     <span class="date-time">${formatDate(a.date)} a las ${a.time} hs</span>
                     <span>${sanitize(a.serviceName)} con ${sanitize(a.stylistName)}</span>
-                    <span class="badge badge-${a.status}">${statusLabel(a.status)}</span>
+                    <span class="badge badge-${realStatus}">${statusLabel(realStatus)}</span>
                 </div>
-                <button class="btn-danger" onclick="cancelMyBooking('${a.id}')">Cancelar</button>
+                ${canCancel ? `<button class="btn-danger" onclick="cancelMyBooking('${a.id}')">Cancelar</button>` : ''}
             </div>
-        `).join('');
+        `;
+        }).join('');
     };
 
     window.cancelMyBooking = function (id) {
@@ -639,8 +643,48 @@
     };
 
     function statusLabel(status) {
-        const labels = { pending: 'Pendiente', confirmed: 'Confirmado', completed: 'Completado', cancelled: 'Cancelado' };
+        const labels = { pending: 'Pendiente', confirmed: 'Confirmado', completed: 'Realizado', cancelled: 'Cancelado' };
         return labels[status] || status;
+    }
+
+    // Función para obtener el estado real del turno (considerando si ya pasó)
+    function getAppointmentStatus(appointment) {
+        // Si ya está cancelado, devolver ese estado
+        if (appointment.status === 'cancelled') {
+            return 'cancelled';
+        }
+
+        // Verificar si el turno ya pasó
+        const appointmentDateTime = new Date(appointment.date + 'T' + appointment.time);
+        const now = new Date();
+
+        if (appointmentDateTime < now) {
+            // Si ya pasó la hora, marcar como realizado
+            return 'completed';
+        }
+
+        // Si no pasó, devolver el estado actual
+        return appointment.status;
+    }
+
+    // Actualizar automáticamente los turnos que ya pasaron
+    function updatePastAppointments() {
+        const appointments = getAppointments();
+        let changed = false;
+
+        appointments.forEach(apt => {
+            if (apt.status !== 'cancelled' && apt.status !== 'completed') {
+                const realStatus = getAppointmentStatus(apt);
+                if (realStatus === 'completed' && apt.status !== 'completed') {
+                    apt.status = 'completed';
+                    changed = true;
+                }
+            }
+        });
+
+        if (changed) {
+            saveAppointments(appointments);
+        }
     }
 
     // ============================================================
@@ -723,6 +767,7 @@
     // ============================================================
 
     function initAdmin() {
+        updatePastAppointments();
         renderAdminAppointments();
         renderAdminServices();
         renderAdminStylists();
@@ -770,7 +815,9 @@
             return;
         }
 
-        tbody.innerHTML = appointments.map(a => `
+        tbody.innerHTML = appointments.map(a => {
+            const realStatus = getAppointmentStatus(a);
+            return `
             <tr>
                 <td>${formatDate(a.date)}</td>
                 <td>${a.time}</td>
@@ -778,19 +825,20 @@
                 <td>${sanitize(a.clientPhone)}</td>
                 <td>${sanitize(a.serviceName)}</td>
                 <td>${sanitize(a.stylistName)}</td>
-                <td><span class="badge badge-${a.status}">${statusLabel(a.status)}</span></td>
+                <td><span class="badge badge-${realStatus}">${statusLabel(realStatus)}</span></td>
                 <td class="actions">
-                    ${a.status === 'confirmed' ? `
+                    ${realStatus === 'confirmed' ? `
                         <button class="btn-success" onclick="updateAppointmentStatus('${a.id}','completed')">Completar</button>
                         <button class="btn-danger" onclick="updateAppointmentStatus('${a.id}','cancelled')">Cancelar</button>
                     ` : ''}
-                    ${a.status === 'pending' ? `
+                    ${realStatus === 'pending' ? `
                         <button class="btn-success" onclick="updateAppointmentStatus('${a.id}','confirmed')">Confirmar</button>
                         <button class="btn-danger" onclick="updateAppointmentStatus('${a.id}','cancelled')">Cancelar</button>
                     ` : ''}
                 </td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
     };
 
     window.updateAppointmentStatus = function (id, status) {
