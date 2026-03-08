@@ -11,16 +11,22 @@ const calendarRoutes = require('./routes/calendar');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+// Middleware - CORS Configuration
 app.use(cors({
     origin: [
         process.env.FRONTEND_URL,
         'http://localhost:5500',
         'http://127.0.0.1:5500',
-        'https://mostaza-peluqueria.web.app'
+        'https://mostaza-peluqueria.web.app',
+        'https://mostaza-peluqueria.firebaseapp.com'
     ],
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
