@@ -988,7 +988,7 @@
     };
 
     window.cancelMyBooking = async function (id) {
-        let appointments = getAppointments();
+        const appointments = getAppointments();
         const apt = appointments.find(a => a.id === id);
         
         if (!apt) return;
@@ -1016,12 +1016,13 @@
                 throw new Error('No se pudo cancelar el turno');
             }
             
-            // Remove from local list
-            appointments = appointments.filter(a => a.id !== apt.id);
-            saveAppointments(appointments);
+            // Remove from local cache immediately and then re-sync from Firestore/backend state.
+            const updatedAppointments = appointments.filter(a => a.id !== apt.id);
+            saveAppointments(updatedAppointments);
+            await syncAppointmentsFromFirestore();
             
             showToast('Turno cancelado', 'success');
-            window.checkMyBookings();
+            await window.checkMyBookings();
         } catch (error) {
             showToast('Error al cancelar: ' + error.message, 'error');
             console.error('Error cancelling appointment:', error);
