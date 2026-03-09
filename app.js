@@ -953,12 +953,14 @@
     };
 
     // ---------- CHECK MY BOOKINGS ----------
-    window.checkMyBookings = async function () {
+    window.checkMyBookings = async function (options = {}) {
         const phone = $('check-phone').value.trim();
         if (!phone) { showToast('Ingresá tu teléfono', 'error'); return; }
 
         // Sincronizar turnos desde Firestore antes de mostrar
-        await syncAppointmentsFromFirestore();
+        if (options.syncRemote !== false) {
+            await syncAppointmentsFromFirestore();
+        }
 
         const normalizedSearchPhone = normalizePhone(phone);
         const appointments = getAppointments().filter(a =>
@@ -1016,13 +1018,13 @@
                 throw new Error('No se pudo cancelar el turno');
             }
             
-            // Remove from local cache immediately and then re-sync from Firestore/backend state.
+            // Remove from local cache immediately so the list disappears without waiting for
+            // Firestore propagation in the same request cycle.
             const updatedAppointments = appointments.filter(a => a.id !== apt.id);
             saveAppointments(updatedAppointments);
-            await syncAppointmentsFromFirestore();
             
             showToast('Turno cancelado', 'success');
-            await window.checkMyBookings();
+            await window.checkMyBookings({ syncRemote: false });
         } catch (error) {
             showToast('Error al cancelar: ' + error.message, 'error');
             console.error('Error cancelling appointment:', error);
