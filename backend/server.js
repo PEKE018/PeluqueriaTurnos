@@ -6,7 +6,25 @@ const admin = require('firebase-admin');
 const path = require('path');
 
 // Initialize Firebase Admin
-const serviceAccount = require('./mostaza-peluqueria-firebase-adminsdk-fbsvc-91f50e545f.json');
+let serviceAccount;
+
+// Try to use environment variable first (for production/Render)
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } catch (e) {
+        console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT:', e.message);
+        process.exit(1);
+    }
+} else {
+    // Fall back to local file (for development)
+    try {
+        serviceAccount = require('./mostaza-peluqueria-firebase-adminsdk-fbsvc-91f50e545f.json');
+    } catch (e) {
+        console.error('Firebase service account file not found and FIREBASE_SERVICE_ACCOUNT not set:', e.message);
+        process.exit(1);
+    }
+}
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
