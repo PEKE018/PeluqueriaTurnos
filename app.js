@@ -988,7 +988,7 @@
     };
 
     window.cancelMyBooking = async function (id) {
-        const appointments = getAppointments();
+        let appointments = getAppointments();
         const apt = appointments.find(a => a.id === id);
         
         if (!apt) return;
@@ -1581,10 +1581,14 @@
                 'Google Calendar Authorization',
                 `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
             );
+
+            if (!authWindow) {
+                throw new Error('El navegador bloqueó la ventana de autorización. Permití popups e intentá nuevamente.');
+            }
             
             // Poll for authorization completion
             const checkInterval = setInterval(async () => {
-                if (authWindow.closed) {
+                if (!authWindow || authWindow.closed) {
                     clearInterval(checkInterval);
                     // Wait a bit and check status
                     setTimeout(async () => {
