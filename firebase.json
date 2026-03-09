@@ -12,7 +12,8 @@
       ".firebase/**",
       "y/**",
       "backend/**",
-      "*.bat"
+      "*.bat",
+      "firestore.rules"
     ],
     "rewrites": [
       {
@@ -20,5 +21,8 @@
         "destination": "/index.html"
       }
     ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
   }
 }

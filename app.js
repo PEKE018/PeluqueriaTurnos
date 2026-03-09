@@ -38,16 +38,69 @@
         localStorage.setItem('pelu_' + key, JSON.stringify(value));
     }
 
+    async function syncCollectionToFirestore(collectionName, items) {
+        if (!window.db) return;
+
+        const {
+            collection,
+            doc,
+            getDocs,
+            writeBatch
+        } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+
+        const snapshot = await getDocs(collection(window.db, collectionName));
+        const batch = writeBatch(window.db);
+        const nextIds = new Set();
+
+        items.forEach(item => {
+            const itemId = String(item.id);
+            nextIds.add(itemId);
+            batch.set(doc(window.db, collectionName, itemId), item);
+        });
+
+        snapshot.docs.forEach(existingDoc => {
+            if (!nextIds.has(existingDoc.id)) {
+                batch.delete(doc(window.db, collectionName, existingDoc.id));
+            }
+        });
+
+        await batch.commit();
+    }
+
     function getSettings() { return getData('settings', DEFAULT_SETTINGS); }
     function saveSettingsData(s) { setData('settings', s); }
     function getServices() { return getData('services', DEFAULT_SERVICES); }
-    function saveServices(s) { setData('services', s); }
+    function saveServices(s, options) {
+        setData('services', s);
+
+        if (options?.syncRemote === false) return;
+
+        syncCollectionToFirestore('services', s).catch(error => {
+            console.error('Error saving services to Firestore:', error);
+        });
+    }
     function getStylists() { return getData('stylists', DEFAULT_STYLISTS); }
-    function saveStylists(s) { setData('stylists', s); }
+    function saveStylists(s, options) {
+        setData('stylists', s);
+
+        if (options?.syncRemote === false) return;
+
+        syncCollectionToFirestore('stylists', s).catch(error => {
+            console.error('Error saving stylists to Firestore:', error);
+        });
+    }
     function getAppointments() { return getData('appointments', []); }
     function saveAppointments(a) { setData('appointments', a); }
     function getBlocks() { return getData('blocks', []); }
-    function saveBlocks(b) { setData('blocks', b); }
+    function saveBlocks(b, options) {
+        setData('blocks', b);
+
+        if (options?.syncRemote === false) return;
+
+        syncCollectionToFirestore('blocks', b).catch(error => {
+            console.error('Error saving blocks to Firestore:', error);
+        });
+    }
 
     // ---------- HELPERS ----------
     function $(id) { return document.getElementById(id); }
@@ -117,29 +170,20 @@
             
             // Load services
             const servicesSnapshot = await getDocs(collection(window.db, 'services'));
-            if (!servicesSnapshot.empty) {
-                const services = servicesSnapshot.docs.map(doc => doc.data());
-                if (services.length > 0) {
-                    const oldServices = getServices();
-                    // Check if services changed
-                    if (JSON.stringify(oldServices) !== JSON.stringify(services)) {
-                        saveServices(services);
-                        dataChanged = true;
-                    }
-                }
+            const services = servicesSnapshot.docs.map(doc => doc.data());
+            const oldServices = getServices();
+            if (JSON.stringify(oldServices) !== JSON.stringify(services)) {
+                saveServices(services, { syncRemote: false });
+                dataChanged = true;
             }
             
             // Load stylists
             const stylistsSnapshot = await getDocs(collection(window.db, 'stylists'));
-            if (!stylistsSnapshot.empty) {
-                const stylists = stylistsSnapshot.docs.map(doc => doc.data());
-                if (stylists.length > 0) {
-                    const oldStylists = getStylists();
-                    if (JSON.stringify(oldStylists) !== JSON.stringify(stylists)) {
-                        saveStylists(stylists);
-                        dataChanged = true;
-                    }
-                }
+            const stylists = stylistsSnapshot.docs.map(doc => doc.data());
+            const oldStylists = getStylists();
+            if (JSON.stringify(oldStylists) !== JSON.stringify(stylists)) {
+                saveStylists(stylists, { syncRemote: false });
+                dataChanged = true;
             }
             
             // Load settings - ALWAYS sync to keep cross-device updated
@@ -164,23 +208,26 @@
             
             // Load appointments - ALWAYS sync to keep cross-device updated
             const appointmentsSnapshot = await getDocs(collection(window.db, 'appointments'));
-            if (!appointmentsSnapshot.empty) {
-                let appointments = appointmentsSnapshot.docs.map(doc => doc.data());
-                if (appointments.length > 0) {
-                    // Normalizar números de teléfono para búsquedas consistentes
-                    appointments = appointments.map(apt => ({
-                        ...apt,
-                        clientPhone: normalizePhone(apt.clientPhone)
-                    }));
-                    
-                    const oldAppointments = getAppointments();
-                    // Check if appointments changed
-                    if (JSON.stringify(oldAppointments) !== JSON.stringify(appointments)) {
-                        console.log('📝 Appointments updated from Firestore');
-                        saveAppointments(appointments);
-                        dataChanged = true;
-                    }
-                }
+            let appointments = appointmentsSnapshot.docs.map(doc => doc.data());
+            appointments = appointments.map(apt => ({
+                ...apt,
+                clientPhone: normalizePhone(apt.clientPhone)
+            }));
+            
+            const oldAppointments = getAppointments();
+            if (JSON.stringify(oldAppointments) !== JSON.stringify(appointments)) {
+                console.log('📝 Appointments updated from Firestore');
+                saveAppointments(appointments);
+                dataChanged = true;
+            }
+
+            // Load blocks
+            const blocksSnapshot = await getDocs(collection(window.db, 'blocks'));
+            const blocks = blocksSnapshot.docs.map(doc => doc.data());
+            const oldBlocks = getBlocks();
+            if (JSON.stringify(oldBlocks) !== JSON.stringify(blocks)) {
+                saveBlocks(blocks, { syncRemote: false });
+                dataChanged = true;
             }
             
             // Re-render if data changed (e.g., new services/stylists/appointments added)
@@ -188,6 +235,11 @@
                 console.log('📦 Data updated from Firestore, refreshing UI...');
                 renderServices();
                 renderCalendar();
+                if ($('appointments-tbody')) renderAdminAppointments();
+                if ($('availability-calendar-wrapper') && !$('availability-calendar-wrapper').classList.contains('hidden')) {
+                    renderAvailabilityCalendarDays();
+                    renderBlocksList();
+                }
             }
         } catch (error) {
             console.log('Firestore sync not available, using localStorage cache');
@@ -202,22 +254,16 @@
             const { getDocs, collection } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
             const appointmentsSnapshot = await getDocs(collection(window.db, 'appointments'));
             
-            if (!appointmentsSnapshot.empty) {
-                let appointments = appointmentsSnapshot.docs.map(doc => doc.data());
-                if (appointments.length > 0) {
-                    // Normalizar números de teléfono para búsquedas consistentes
-                    appointments = appointments.map(apt => ({
-                        ...apt,
-                        clientPhone: normalizePhone(apt.clientPhone)
-                    }));
-                    
-                    const oldAppointments = getAppointments();
-                    // Only update if appointments changed
-                    if (JSON.stringify(oldAppointments) !== JSON.stringify(appointments)) {
-                        console.log('📝 Synced appointments from Firestore');
-                        saveAppointments(appointments);
-                    }
-                }
+            let appointments = appointmentsSnapshot.docs.map(doc => doc.data());
+            appointments = appointments.map(apt => ({
+                ...apt,
+                clientPhone: normalizePhone(apt.clientPhone)
+            }));
+            
+            const oldAppointments = getAppointments();
+            if (JSON.stringify(oldAppointments) !== JSON.stringify(appointments)) {
+                console.log('📝 Synced appointments from Firestore');
+                saveAppointments(appointments);
             }
         } catch (error) {
             console.log('Could not sync appointments from Firestore:', error.message);
@@ -624,67 +670,51 @@
             createdAt: new Date().toISOString()
         };
 
-        // Save locally first
-        appointments.push(appointment);
-        saveAppointments(appointments);
-
-        // Send to backend (Google Calendar integration)
+        // Send to backend first. The backend is the source of truth because it also
+        // writes to Firestore and triggers Google Calendar integration.
         let calendarCreated = false;
-        let backendError = null;
+        let savedAppointment = null;
         
         try {
-            const response = await fetch(`${BACKEND_URL}/api/appointments`, {
+            const response = await fetch(`${getBackendURL()}/api/appointments`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(appointment),
-                timeout: 10000 // 10 segundo timeout
+                body: JSON.stringify(appointment)
             });
 
-            if (response.ok) {
-                const result = await response.json();
-                console.log('✅ Turno sincronizado con Google Calendar:', result);
-                
-                calendarCreated = result.calendarCreated || false;
-                
-                // Update appointment with calendar event ID if available
-                if (result.appointment && result.appointment.calendarEventId) {
-                    const index = appointments.findIndex(a => a.id === appointment.id);
-                    if (index >= 0) {
-                        appointments[index].calendarEventId = result.appointment.calendarEventId;
-                        saveAppointments(appointments);
-                    }
-                }
-                
-                // Mostrar advertencia si el calendario no se sincronizó pero el turno sí
-                if (!calendarCreated) {
-                    console.warn('⚠️ Turno creado pero no sincronizado a Google Calendar');
-                }
-            } else {
+            if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
                 const errorMsg = errorData.error || `Error ${response.status}: ${response.statusText}`;
-                backendError = errorMsg;
-                console.error('Backend error:', errorMsg);
+                throw new Error(errorMsg);
             }
+
+            const result = await response.json();
+            console.log('✅ Turno sincronizado con backend:', result);
+
+            calendarCreated = result.calendarCreated || false;
+            savedAppointment = result.appointment || appointment;
+
+            const nextAppointments = getAppointments().filter(a => a.id !== savedAppointment.id);
+            nextAppointments.push(savedAppointment);
+            saveAppointments(nextAppointments);
+
+            await syncAppointmentsFromFirestore();
         } catch (error) {
-            backendError = `No se puede conectar con el servidor: ${error.message}`;
             console.error('Network error:', error);
+            isConfirming = false;
+            showToast('No se pudo confirmar el turno. Intentá nuevamente. ' + error.message, 'error');
+            return;
         }
+
+        const finalAppointment = savedAppointment || appointment;
 
         // Show confirmation FIRST
         console.log('📝 Preparando detalles de confirmación...');
         
         let confirmationMessage = '';
-        if (backendError) {
-            confirmationMessage = `
-                <p style="margin-top:1rem;padding:1rem;background:rgba(255,107,107,0.1);border-radius:8px;font-size:0.9rem;border-left:4px solid #ff6b6b;">
-                    ⚠️ <strong>Importante:</strong> El turno fue guardado, pero no se pudo sincronizar con Google Calendar del profesional.
-                    <br><small>Error: ${sanitize(backendError)}</small>
-                    <br>El profesional será notificado manualmente.
-                </p>
-            `;
-        } else if (calendarCreated) {
+        if (calendarCreated) {
             confirmationMessage = `
                 <p style="margin-top:1rem;padding:1rem;background:rgba(212,160,36,0.1);border-radius:8px;font-size:0.9rem;">
                     ✅ Turno confirmado y sincronizado automáticamente al Google Calendar del profesional.
@@ -699,26 +729,21 @@
         }
         
         $('confirmation-details').innerHTML = `
-            <p><strong>Servicio:</strong> ${sanitize(appointment.serviceName)}</p>
-            <p><strong>Profesional:</strong> ${sanitize(appointment.stylistName)}</p>
-            <p><strong>Fecha:</strong> ${formatDate(appointment.date)}</p>
-            <p><strong>Hora:</strong> ${appointment.time} hs</p>
-            <p><strong>Precio:</strong> ${formatPrice(appointment.price)}</p>
-            <p><strong>Cliente:</strong> ${sanitize(appointment.clientName)}</p>
-            <p><strong>Email:</strong> ${sanitize(appointment.clientEmail)}</p>
-            <p><strong>Teléfono:</strong> ${sanitize(appointment.clientPhone)}</p>
+            <p><strong>Servicio:</strong> ${sanitize(finalAppointment.serviceName)}</p>
+            <p><strong>Profesional:</strong> ${sanitize(finalAppointment.stylistName)}</p>
+            <p><strong>Fecha:</strong> ${formatDate(finalAppointment.date)}</p>
+            <p><strong>Hora:</strong> ${finalAppointment.time} hs</p>
+            <p><strong>Precio:</strong> ${formatPrice(finalAppointment.price)}</p>
+            <p><strong>Cliente:</strong> ${sanitize(finalAppointment.clientName)}</p>
+            <p><strong>Email:</strong> ${sanitize(finalAppointment.clientEmail)}</p>
+            <p><strong>Teléfono:</strong> ${sanitize(finalAppointment.clientPhone)}</p>
             ${confirmationMessage}
         `;
 
         console.log('✅ Mostrando pantalla de confirmación');
         goToStep('step-confirmation');
         
-        // Mostrar advertencia visual si hay error
-        if (backendError) {
-            showToast('⚠️ Turno guardado pero con problemas: ' + backendError, 'warning');
-        } else {
-            showToast('¡Turno reservado con éxito!', 'success');
-        }
+        showToast('¡Turno reservado con éxito!', 'success');
         
         // Reset flag after showing confirmation
         isConfirming = false;
@@ -727,7 +752,7 @@
         // Send calendar invitations AFTER showing confirmation (asynchronous)
         setTimeout(() => {
             console.log('📧 Enviando invitaciones en segundo plano...');
-            sendCalendarInvitations(appointment, stylist, service);
+            sendCalendarInvitations(finalAppointment, stylist, service);
         }, 100);
     };
 

@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Servicios - lectura y escritura pública
+    match /services/{document=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Profesionales - lectura y escritura pública
+    match /stylists/{document=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Configuración - lectura y escritura pública
+    match /settings/{document=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Turnos - lectura y escritura pública (los clientes crean sus turnos)
+    match /appointments/{document=**} {
+      allow read, write: if true;
+    }
+    
+    // Bloques de disponibilidad - lectura y escritura pública
+    match /blocks/{document=**} {
+      allow read, write: if true;
+    }
+    
+    // Tokens de Google Calendar - solo backend vía Admin SDK
+    match /tokens/{document=**} {
+      allow read, write: if false;
+    }
+    
+    // Denegar acceso a todo lo demás
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
