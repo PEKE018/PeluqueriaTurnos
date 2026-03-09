@@ -158,6 +158,133 @@
     }
 
     const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    let firestoreUnsubscribers = [];
+    let realtimeSyncInitialized = false;
+
+    function isSameData(left, right) {
+        return JSON.stringify(left) === JSON.stringify(right);
+    }
+
+    function normalizeAppointments(appointments) {
+        return appointments.map(apt => ({
+            ...apt,
+            clientPhone: normalizePhone(apt.clientPhone)
+        }));
+    }
+
+    function syncServicesFromRemote(services) {
+        const nextServices = services || [];
+        const oldServices = getServices();
+        if (isSameData(oldServices, nextServices)) return false;
+
+        saveServices(nextServices, { syncRemote: false });
+        renderServices();
+        if ($('services-tbody')) renderAdminServices();
+        return true;
+    }
+
+    function syncStylistsFromRemote(stylists) {
+        const nextStylists = stylists || [];
+        const oldStylists = getStylists();
+        if (isSameData(oldStylists, nextStylists)) return false;
+
+        saveStylists(nextStylists, { syncRemote: false });
+
+        const stylistStep = $('step-stylist');
+        if (stylistStep && !stylistStep.classList.contains('hidden')) {
+            renderStylists();
+        }
+
+        if ($('stylists-tbody')) renderAdminStylists();
+        if ($('availability-stylist')) populateAvailabilityStylistDropdown();
+        renderCalendar();
+        return true;
+    }
+
+    function syncSettingsFromRemote(settings) {
+        const nextSettings = settings || DEFAULT_SETTINGS;
+        const oldSettings = getSettings();
+
+        updateSettingsUI(nextSettings);
+
+        if (isSameData(oldSettings, nextSettings)) {
+            if ($('working-days-checks')) loadSettingsForm();
+            return false;
+        }
+
+        console.log('🔄 Settings updated from Firestore');
+        saveSettingsData(nextSettings);
+        updateSettingsUI(nextSettings);
+        renderCalendar();
+        if ($('working-days-checks')) loadSettingsForm();
+        if ($('availability-calendar-wrapper') && !$('availability-calendar-wrapper').classList.contains('hidden')) {
+            renderAvailabilityCalendarDays();
+        }
+        return true;
+    }
+
+    function syncAppointmentsFromRemote(appointments) {
+        const nextAppointments = normalizeAppointments(appointments || []);
+        const oldAppointments = getAppointments();
+        if (isSameData(oldAppointments, nextAppointments)) return false;
+
+        console.log('📝 Appointments updated from Firestore');
+        saveAppointments(nextAppointments);
+        renderCalendar();
+        if ($('appointments-tbody')) renderAdminAppointments();
+        if ($('availability-calendar-wrapper') && !$('availability-calendar-wrapper').classList.contains('hidden')) {
+            renderAvailabilityCalendarDays();
+        }
+        return true;
+    }
+
+    function syncBlocksFromRemote(blocks) {
+        const nextBlocks = blocks || [];
+        const oldBlocks = getBlocks();
+        if (isSameData(oldBlocks, nextBlocks)) return false;
+
+        saveBlocks(nextBlocks, { syncRemote: false });
+        renderCalendar();
+        if ($('availability-calendar-wrapper') && !$('availability-calendar-wrapper').classList.contains('hidden')) {
+            renderAvailabilityCalendarDays();
+            renderBlocksList();
+        }
+        return true;
+    }
+
+    async function setupRealtimeFirestoreSync() {
+        if (!window.db || realtimeSyncInitialized) return;
+
+        try {
+            const { collection, onSnapshot } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+
+            const subscribe = (collectionName, handler) => {
+                const unsubscribe = onSnapshot(
+                    collection(window.db, collectionName),
+                    snapshot => {
+                        const docs = snapshot.docs.map(doc => doc.data());
+                        handler(docs);
+                    },
+                    error => {
+                        console.error(`Realtime sync error for ${collectionName}:`, error.message);
+                    }
+                );
+
+                firestoreUnsubscribers.push(unsubscribe);
+            };
+
+            subscribe('services', syncServicesFromRemote);
+            subscribe('stylists', syncStylistsFromRemote);
+            subscribe('settings', docs => syncSettingsFromRemote(docs[0] || DEFAULT_SETTINGS));
+            subscribe('appointments', syncAppointmentsFromRemote);
+            subscribe('blocks', syncBlocksFromRemote);
+
+            realtimeSyncInitialized = true;
+            console.log('⚡ Realtime Firestore sync enabled');
+        } catch (error) {
+            console.error('Could not start realtime Firestore sync:', error.message);
+        }
+    }
 
     // ---------- FIRESTORE SYNC ----------
     async function loadFromFirestore() {
@@ -171,75 +298,35 @@
             // Load services
             const servicesSnapshot = await getDocs(collection(window.db, 'services'));
             const services = servicesSnapshot.docs.map(doc => doc.data());
-            const oldServices = getServices();
-            if (JSON.stringify(oldServices) !== JSON.stringify(services)) {
-                saveServices(services, { syncRemote: false });
-                dataChanged = true;
-            }
+            dataChanged = syncServicesFromRemote(services) || dataChanged;
             
             // Load stylists
             const stylistsSnapshot = await getDocs(collection(window.db, 'stylists'));
             const stylists = stylistsSnapshot.docs.map(doc => doc.data());
-            const oldStylists = getStylists();
-            if (JSON.stringify(oldStylists) !== JSON.stringify(stylists)) {
-                saveStylists(stylists, { syncRemote: false });
-                dataChanged = true;
-            }
+            dataChanged = syncStylistsFromRemote(stylists) || dataChanged;
             
             // Load settings - ALWAYS sync to keep cross-device updated
             const settingsSnapshot = await getDocs(collection(window.db, 'settings'));
             if (!settingsSnapshot.empty) {
                 const firestoreSettings = settingsSnapshot.docs.map(doc => doc.data());
                 if (firestoreSettings.length > 0) {
-                    const oldSettings = getSettings();
-                    // Check if settings changed
-                    if (JSON.stringify(oldSettings) !== JSON.stringify(firestoreSettings[0])) {
-                        console.log('🔄 Settings updated from Firestore');
-                        saveSettingsData(firestoreSettings[0]);
-                        // Update UI elements that display settings
-                        updateSettingsUI(firestoreSettings[0]);
-                        dataChanged = true;
-                    } else {
-                        // Even if settings haven't changed, update UI on first load
-                        updateSettingsUI(firestoreSettings[0]);
-                    }
+                    dataChanged = syncSettingsFromRemote(firestoreSettings[0]) || dataChanged;
                 }
             }
             
             // Load appointments - ALWAYS sync to keep cross-device updated
             const appointmentsSnapshot = await getDocs(collection(window.db, 'appointments'));
-            let appointments = appointmentsSnapshot.docs.map(doc => doc.data());
-            appointments = appointments.map(apt => ({
-                ...apt,
-                clientPhone: normalizePhone(apt.clientPhone)
-            }));
-            
-            const oldAppointments = getAppointments();
-            if (JSON.stringify(oldAppointments) !== JSON.stringify(appointments)) {
-                console.log('📝 Appointments updated from Firestore');
-                saveAppointments(appointments);
-                dataChanged = true;
-            }
+            const appointments = appointmentsSnapshot.docs.map(doc => doc.data());
+            dataChanged = syncAppointmentsFromRemote(appointments) || dataChanged;
 
             // Load blocks
             const blocksSnapshot = await getDocs(collection(window.db, 'blocks'));
             const blocks = blocksSnapshot.docs.map(doc => doc.data());
-            const oldBlocks = getBlocks();
-            if (JSON.stringify(oldBlocks) !== JSON.stringify(blocks)) {
-                saveBlocks(blocks, { syncRemote: false });
-                dataChanged = true;
-            }
+            dataChanged = syncBlocksFromRemote(blocks) || dataChanged;
             
             // Re-render if data changed (e.g., new services/stylists/appointments added)
             if (dataChanged) {
                 console.log('📦 Data updated from Firestore, refreshing UI...');
-                renderServices();
-                renderCalendar();
-                if ($('appointments-tbody')) renderAdminAppointments();
-                if ($('availability-calendar-wrapper') && !$('availability-calendar-wrapper').classList.contains('hidden')) {
-                    renderAvailabilityCalendarDays();
-                    renderBlocksList();
-                }
             }
         } catch (error) {
             console.log('Firestore sync not available, using localStorage cache');
@@ -254,16 +341,9 @@
             const { getDocs, collection } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
             const appointmentsSnapshot = await getDocs(collection(window.db, 'appointments'));
             
-            let appointments = appointmentsSnapshot.docs.map(doc => doc.data());
-            appointments = appointments.map(apt => ({
-                ...apt,
-                clientPhone: normalizePhone(apt.clientPhone)
-            }));
-            
-            const oldAppointments = getAppointments();
-            if (JSON.stringify(oldAppointments) !== JSON.stringify(appointments)) {
+            const appointments = appointmentsSnapshot.docs.map(doc => doc.data());
+            if (syncAppointmentsFromRemote(appointments)) {
                 console.log('📝 Synced appointments from Firestore');
-                saveAppointments(appointments);
             }
         } catch (error) {
             console.log('Could not sync appointments from Firestore:', error.message);
@@ -2276,16 +2356,8 @@
         loadFromFirestore().catch(err => {
             console.log('Background sync error (non-blocking):', err.message);
         });
-        
-        // PERIODIC SYNC: Every 30 seconds, sync appointments from Firestore
-        // This ensures cross-device updates (when one device creates appointment, others see it)
-        setInterval(async () => {
-            try {
-                await loadFromFirestore();
-            } catch (error) {
-                console.log('Periodic sync error:', error.message);
-            }
-        }, 30000); // 30 seconds
+
+        setupRealtimeFirestoreSync();
     });
 
 })();
