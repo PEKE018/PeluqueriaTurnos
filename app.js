@@ -90,18 +90,33 @@
             
             const { getDocs, collection } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
             
+            let dataChanged = false;
+            
             // Load services
             const servicesSnapshot = await getDocs(collection(window.db, 'services'));
             if (!servicesSnapshot.empty) {
                 const services = servicesSnapshot.docs.map(doc => doc.data());
-                if (services.length > 0) saveServices(services);
+                if (services.length > 0) {
+                    const oldServices = getServices();
+                    // Check if services changed
+                    if (JSON.stringify(oldServices) !== JSON.stringify(services)) {
+                        saveServices(services);
+                        dataChanged = true;
+                    }
+                }
             }
             
             // Load stylists
             const stylistsSnapshot = await getDocs(collection(window.db, 'stylists'));
             if (!stylistsSnapshot.empty) {
                 const stylists = stylistsSnapshot.docs.map(doc => doc.data());
-                if (stylists.length > 0) saveStylists(stylists);
+                if (stylists.length > 0) {
+                    const oldStylists = getStylists();
+                    if (JSON.stringify(oldStylists) !== JSON.stringify(stylists)) {
+                        saveStylists(stylists);
+                        dataChanged = true;
+                    }
+                }
             }
             
             // Load settings
@@ -116,6 +131,13 @@
             if (!appointmentsSnapshot.empty) {
                 const appointments = appointmentsSnapshot.docs.map(doc => doc.data());
                 if (appointments.length > 0) saveAppointments(appointments);
+            }
+            
+            // Re-render if data changed (e.g., new services/stylists added)
+            if (dataChanged) {
+                console.log('📦 Data updated from Firestore, refreshing UI...');
+                renderServices();
+                renderCalendar();
             }
         } catch (error) {
             console.log('Firestore sync not available, using localStorage cache');
@@ -2034,10 +2056,14 @@
             emailjs.init(emailConfig.publicKey);
         }
         
-        // Load data from Firestore before initializing client
-        await loadFromFirestore();
-        
+        // Initialize client FIRST with localStorage data (instantaneous)
         initClient();
+        
+        // Load data from Firestore in background (no await - don't block UI)
+        // Si hay cambios, se re-renderiza automáticamente
+        loadFromFirestore().catch(err => {
+            console.log('Background sync error (non-blocking):', err.message);
+        });
     });
 
 })();
