@@ -1027,17 +1027,33 @@
     function populateAvailabilityStylistDropdown() {
         const select = $('availability-stylist');
         const container = $('availability-stylist-container');
+        const noStylistsMsg = $('no-stylists-message');
+        const calendarWrapper = $('availability-calendar-wrapper');
         if (!select) return;
         
         const stylists = getStylists();
+        
+        // If no stylists, show message
+        if (stylists.length === 0) {
+            noStylistsMsg.classList.remove('hidden');
+            container.classList.add('hidden');
+            calendarWrapper.classList.add('hidden');
+            return;
+        }
+        
+        noStylistsMsg.classList.add('hidden');
         
         // If only one stylist, hide the dropdown and auto-select
         if (stylists.length === 1) {
             container.classList.add('hidden');
             select.value = stylists[0].id;
-            window.renderAvailabilityCalendar();
+            selectedBlockStylist = stylists[0].id;
+            calendarWrapper.classList.remove('hidden');
+            renderAvailabilityCalendarDays();
+            renderBlocksList();
         } else {
             container.classList.remove('hidden');
+            calendarWrapper.classList.add('hidden');
             const options = [`<option value="">Seleccioná un profesional</option>`];
             stylists.forEach(s => {
                 options.push(`<option value="${s.id}">${sanitize(s.name)}</option>`);
@@ -1864,7 +1880,7 @@
     let selectedBlockStylist = null;
 
     window.renderAvailabilityCalendar = function() {
-        const stylistId = parseInt($('availability-stylist').value);
+        const stylistId = $('availability-stylist').value;
         if (!stylistId) {
             $('availability-calendar-wrapper').classList.add('hidden');
             return;
