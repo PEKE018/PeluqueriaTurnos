@@ -920,24 +920,10 @@
     let logoutClickTimer = null;
 
     window.handleLogoutClick = function () {
-        logoutClickCount++;
+        // Mostrar confirmación de logout
+        const confirmed = confirm('¿Estás seguro de que querés cerrar sesión?');
         
-        // Resetear contador después de 3 segundos sin clicks
-        clearTimeout(logoutClickTimer);
-        logoutClickTimer = setTimeout(() => {
-            logoutClickCount = 0;
-        }, 3000);
-
-        // Si llega a 5 clicks, mostrar configuración técnica
-        if (logoutClickCount === 5) {
-            logoutClickCount = 0;
-            showTechnicalConfig();
-            return;
-        }
-
-        // Si llega a 6 clicks (después de ver la config), hacer logout
-        if (logoutClickCount === 6) {
-            logoutClickCount = 0;
+        if (confirmed) {
             window.adminLogout();
         }
     };
@@ -950,9 +936,22 @@
     };
 
     window.adminLogout = function () {
+        console.log('🔓 Closing admin session...');
+        
+        // Hide admin, show client
         $('app-admin').classList.add('hidden');
         $('app-client').classList.remove('hidden');
+        
+        // Reset booking state
+        resetBooking();
+        
+        // Reinitialize client
         initClient();
+        
+        // Show success message
+        showToast('Sesión cerrada correctamente', 'success');
+        
+        console.log('✅ Admin logout completed');
     };
 
     window.closeModal = function (id) {
