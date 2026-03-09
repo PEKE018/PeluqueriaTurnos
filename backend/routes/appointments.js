@@ -44,8 +44,14 @@ async function createAppointmentCalendarEvent(appointment) {
         // Get tokens and create auth client
         let tokens = await getTokens(stylistId);
         
+        if (!tokens) {
+            console.log(`No tokens found for stylist ${stylistId}`);
+            return null;
+        }
+        
         // Refresh token if expired
         if (tokens.expiry_date && tokens.expiry_date < Date.now()) {
+            console.log('Token expired, refreshing...');
             tokens = await refreshAccessToken(tokens.refresh_token);
             await saveTokens(stylistId, tokens);
         }
@@ -56,40 +62,50 @@ async function createAppointmentCalendarEvent(appointment) {
         const [year, month, day] = date.split('-');
         const [hours, minutes] = time.split(':');
         
-        // Create datetime string in local format (NOT ISO string)
-        // Format: YYYY-MM-DDTHH:mm:ss
-        const startDateTime = `${year}-${month}-${day}T${hours}:${minutes}:00`;
+        // Create proper ISO 8601 format with timezone for Argentina (UTC-3)
+        // Google Calendar expects: YYYY-MM-DDTHH:mm:ss-03:00
+        const startISO = `${year}-${month}-${day}T${hours}:${minutes}:00`;
         
         // Calculate end time
         const startDate = new Date(year, month - 1, day, parseInt(hours), parseInt(minutes));
         const endDate = new Date(startDate.getTime() + duration * 60000);
         const endHours = String(endDate.getHours()).padStart(2, '0');
         const endMinutes = String(endDate.getMinutes()).padStart(2, '0');
-        const endDateTime = `${year}-${month}-${day}T${endHours}:${endMinutes}:00`;
+        const endISO = `${year}-${month}-${day}T${endHours}:${endMinutes}:00`;
         
-        // Prepare event details with timezone
+        console.log(`Creating calendar event: ${startISO} to ${endISO}`);
+        
+        // Prepare event details - Google Calendar API format
         const eventDetails = {
             summary: `${appointment.serviceName} - ${appointment.clientName}`,
             description: `Cliente: ${appointment.clientName}\nTeléfono: ${appointment.clientPhone}\nEmail: ${appointment.clientEmail || 'No especificado'}\nServicio: ${appointment.serviceName}\nPrecio: $${appointment.price}`,
             start: {
-                dateTime: startDateTime,
+                dateTime: startISO,  // ISO format
                 timeZone: 'America/Argentina/Buenos_Aires'
             },
             end: {
-                dateTime: endDateTime,
+                dateTime: endISO,  // ISO format
                 timeZone: 'America/Argentina/Buenos_Aires'
             },
             attendees: appointment.clientEmail ? [{ email: appointment.clientEmail }] : []
         };
         
+        console.log('Event details:', JSON.stringify(eventDetails, null, 2));
+        
         // Create calendar event
         const event = await createCalendarEvent(auth, eventDetails);
         
-        console.log(`✅ Calendar event created: ${event.id}`);
+        console.log(`✅ Calendar event created successfully: ${event.id}`);
         return event.id;
         
     } catch (error) {
-        console.error('Error creating calendar event:', error);
+        console.error('❌ Error creating calendar event:', {
+            stylistId: appointment.stylistId,
+            date: appointment.date,
+            time: appointment.time,
+            errorMessage: error.message,
+            errorStack: error.stack
+        });
         return null;
     }
 }

@@ -56,37 +56,55 @@ async function refreshAccessToken(refreshToken) {
  * Create calendar event
  */
 async function createCalendarEvent(auth, eventDetails) {
-    const calendar = google.calendar({ version: 'v3', auth });
-    
-    const event = {
-        summary: eventDetails.summary,
-        description: eventDetails.description,
-        start: {
+    try {
+        const calendar = google.calendar({ version: 'v3', auth });
+        
+        // Support both old format (startDateTime/endDateTime) and new format (start/end objects)
+        const start = eventDetails.start || {
             dateTime: eventDetails.startDateTime,
             timeZone: 'America/Argentina/Buenos_Aires'
-        },
-        end: {
+        };
+        
+        const end = eventDetails.end || {
             dateTime: eventDetails.endDateTime,
             timeZone: 'America/Argentina/Buenos_Aires'
-        },
-        attendees: eventDetails.attendees || [],
-        reminders: {
-            useDefault: false,
-            overrides: [
-                { method: 'email', minutes: 24 * 60 },
-                { method: 'popup', minutes: 60 }
-            ]
-        },
-        colorId: '5' // Yellow/Mustard color
-    };
-    
-    const response = await calendar.events.insert({
-        calendarId: 'primary',
-        resource: event,
-        sendUpdates: 'all' // Send email notifications
-    });
-    
-    return response.data;
+        };
+        
+        const event = {
+            summary: eventDetails.summary,
+            description: eventDetails.description,
+            start,
+            end,
+            attendees: eventDetails.attendees || [],
+            reminders: {
+                useDefault: false,
+                overrides: [
+                    { method: 'email', minutes: 24 * 60 },
+                    { method: 'popup', minutes: 60 }
+                ]
+            },
+            colorId: '5' // Yellow/Mustard color
+        };
+        
+        console.log('Inserting event into Google Calendar:', JSON.stringify(event, null, 2));
+        
+        const response = await calendar.events.insert({
+            calendarId: 'primary',
+            resource: event,
+            sendUpdates: 'all' // Send email notifications
+        });
+        
+        console.log('✅ Google Calendar event inserted successfully:', response.data.id);
+        return response.data;
+        
+    } catch (error) {
+        console.error('❌ Error inserting Google Calendar event:', {
+            message: error.message,
+            code: error.code,
+            details: error.errors
+        });
+        throw error;
+    }
 }
 
 /**
