@@ -2,6 +2,19 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const admin = require('firebase-admin');
+const path = require('path');
+
+// Initialize Firebase Admin
+const serviceAccount = require('./mostaza-peluqueria-firebase-adminsdk-fbsvc-91f50e545f.json');
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    projectId: serviceAccount.project_id
+});
+
+// Export Firestore instance for use in other modules
+global.db = admin.firestore();
 
 // Routes
 const authRoutes = require('./routes/auth');

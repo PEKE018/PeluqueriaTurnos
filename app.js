@@ -126,14 +126,22 @@
                 if (settings.length > 0) saveSettingsData(settings[0]);
             }
             
-            // Load appointments
+            // Load appointments - ALWAYS sync to keep cross-device updated
             const appointmentsSnapshot = await getDocs(collection(window.db, 'appointments'));
             if (!appointmentsSnapshot.empty) {
                 const appointments = appointmentsSnapshot.docs.map(doc => doc.data());
-                if (appointments.length > 0) saveAppointments(appointments);
+                if (appointments.length > 0) {
+                    const oldAppointments = getAppointments();
+                    // Check if appointments changed
+                    if (JSON.stringify(oldAppointments) !== JSON.stringify(appointments)) {
+                        console.log('📝 Appointments updated from Firestore');
+                        saveAppointments(appointments);
+                        dataChanged = true;
+                    }
+                }
             }
             
-            // Re-render if data changed (e.g., new services/stylists added)
+            // Re-render if data changed (e.g., new services/stylists/appointments added)
             if (dataChanged) {
                 console.log('📦 Data updated from Firestore, refreshing UI...');
                 renderServices();
@@ -154,7 +162,14 @@
             
             if (!appointmentsSnapshot.empty) {
                 const appointments = appointmentsSnapshot.docs.map(doc => doc.data());
-                if (appointments.length > 0) saveAppointments(appointments);
+                if (appointments.length > 0) {
+                    const oldAppointments = getAppointments();
+                    // Only update if appointments changed
+                    if (JSON.stringify(oldAppointments) !== JSON.stringify(appointments)) {
+                        console.log('📝 Synced appointments from Firestore');
+                        saveAppointments(appointments);
+                    }
+                }
             }
         } catch (error) {
             console.log('Could not sync appointments from Firestore:', error.message);
@@ -2120,6 +2135,16 @@
         loadFromFirestore().catch(err => {
             console.log('Background sync error (non-blocking):', err.message);
         });
+        
+        // PERIODIC SYNC: Every 30 seconds, sync appointments from Firestore
+        // This ensures cross-device updates (when one device creates appointment, others see it)
+        setInterval(async () => {
+            try {
+                await loadFromFirestore();
+            } catch (error) {
+                console.log('Periodic sync error:', error.message);
+            }
+        }, 30000); // 30 seconds
     });
 
 })();

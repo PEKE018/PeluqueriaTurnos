@@ -1,44 +1,9 @@
-const fs = require('fs');
-const path = require('path');
+// ============================================================
+//  FIRESTORE DATA LAYER
+//  Replaces JSON files with Firestore backend
+// ============================================================
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const TOKENS_FILE = path.join(DATA_DIR, 'tokens.json');
-const APPOINTMENTS_FILE = path.join(DATA_DIR, 'appointments.json');
-
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-/**
- * Read JSON file
- */
-function readJSON(filePath, defaultValue = {}) {
-    try {
-        if (!fs.existsSync(filePath)) {
-            writeJSON(filePath, defaultValue);
-            return defaultValue;
-        }
-        const data = fs.readFileSync(filePath, 'utf8');
-        return JSON.parse(data);
-    } catch (error) {
-        console.error(`Error reading ${filePath}:`, error);
-        return defaultValue;
-    }
-}
-
-/**
- * Write JSON file
- */
-function writeJSON(filePath, data) {
-    try {
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
-        return true;
-    } catch (error) {
-        console.error(`Error writing ${filePath}:`, error);
-        return false;
-    }
-}
+const db = global.db; // Initialized in server.js
 
 // ============================================================
 //  TOKENS MANAGEMENT (OAuth tokens for stylists)
@@ -47,38 +12,56 @@ function writeJSON(filePath, data) {
 /**
  * Save stylist's Google Calendar tokens
  */
-function saveTokens(stylistId, tokens) {
-    const allTokens = readJSON(TOKENS_FILE, {});
-    allTokens[stylistId] = {
-        ...tokens,
-        updatedAt: new Date().toISOString()
-    };
-    return writeJSON(TOKENS_FILE, allTokens);
+async function saveTokens(stylistId, tokens) {
+    try {
+        await db.collection('tokens').doc(stylistId).set({
+            ...tokens,
+            updatedAt: new Date().toISOString()
+        });
+        return true;
+    } catch (error) {
+        console.error('Error saving tokens:', error);
+        return false;
+    }
 }
 
 /**
  * Get stylist's tokens
  */
-function getTokens(stylistId) {
-    const allTokens = readJSON(TOKENS_FILE, {});
-    return allTokens[stylistId] || null;
+async function getTokens(stylistId) {
+    try {
+        const doc = await db.collection('tokens').doc(stylistId).get();
+        return doc.exists ? doc.data() : null;
+    } catch (error) {
+        console.error('Error getting tokens:', error);
+        return null;
+    }
 }
 
 /**
  * Check if stylist has authorized calendar
  */
-function hasAuthorizedCalendar(stylistId) {
-    const tokens = getTokens(stylistId);
-    return tokens && tokens.refresh_token ? true : false;
+async function hasAuthorizedCalendar(stylistId) {
+    try {
+        const tokens = await getTokens(stylistId);
+        return tokens && tokens.refresh_token ? true : false;
+    } catch (error) {
+        console.error('Error checking calendar authorization:', error);
+        return false;
+    }
 }
 
 /**
  * Remove stylist's tokens
  */
-function removeTokens(stylistId) {
-    const allTokens = readJSON(TOKENS_FILE, {});
-    delete allTokens[stylistId];
-    return writeJSON(TOKENS_FILE, allTokens);
+async function removeTokens(stylistId) {
+    try {
+        await db.collection('tokens').doc(stylistId).delete();
+        return true;
+    } catch (error) {
+        console.error('Error removing tokens:', error);
+        return false;
+    }
 }
 
 // ============================================================
@@ -88,59 +71,78 @@ function removeTokens(stylistId) {
 /**
  * Save appointment with calendar event ID
  */
-function saveAppointment(appointment) {
-    const appointments = readJSON(APPOINTMENTS_FILE, []);
-    
-    // Check if appointment already exists (update)
-    const index = appointments.findIndex(a => a.id === appointment.id);
-    
-    if (index >= 0) {
-        appointments[index] = {
-            ...appointments[index],
+async function saveAppointment(appointment) {
+    try {
+        const docRef = db.collection('appointments').doc(appointment.id);
+        await docRef.set({
             ...appointment,
             updatedAt: new Date().toISOString()
-        };
-    } else {
-        appointments.push({
-            ...appointment,
-            createdAt: new Date().toISOString()
-        });
+        }, { merge: true });
+        return appointment;
+    } catch (error) {
+        console.error('Error saving appointment:', error);
+        throw error;
     }
-    
-    writeJSON(APPOINTMENTS_FILE, appointments);
-    return appointment;
 }
 
 /**
  * Get all appointments
  */
-function getAppointments() {
-    return readJSON(APPOINTMENTS_FILE, []);
+async function getAppointments() {
+    try {
+        const snapshot = await db.collection('appointments').get();
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+    } catch (error) {
+        console.error('Error getting appointments:', error);
+        return [];
+    }
 }
 
 /**
  * Get appointment by ID
  */
-function getAppointmentById(id) {
-    const appointments = getAppointments();
-    return appointments.find(a => a.id === id);
+async function getAppointmentById(id) {
+    try {
+        const doc = await db.collection('appointments').doc(id).get();
+        return doc.exists ? { id: doc.id, ...doc.data() } : null;
+    } catch (error) {
+        console.error('Error getting appointment by ID:', error);
+        return null;
+    }
 }
 
 /**
  * Get appointments by stylist
  */
-function getAppointmentsByStylist(stylistId) {
-    const appointments = getAppointments();
-    return appointments.filter(a => a.stylistId === stylistId);
+async function getAppointmentsByStylist(stylistId) {
+    try {
+        const snapshot = await db.collection('appointments')
+            .where('stylistId', '==', stylistId)
+            .get();
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+    } catch (error) {
+        console.error('Error getting appointments by stylist:', error);
+        return [];
+    }
 }
 
 /**
  * Delete appointment
  */
-function deleteAppointment(id) {
-    const appointments = getAppointments();
-    const filtered = appointments.filter(a => a.id !== id);
-    return writeJSON(APPOINTMENTS_FILE, filtered);
+async function deleteAppointment(id) {
+    try {
+        await db.collection('appointments').doc(id).delete();
+        return true;
+    } catch (error) {
+        console.error('Error deleting appointment:', error);
+        return false;
+    }
 }
 
 module.exports = {
