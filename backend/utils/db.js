@@ -5,6 +5,10 @@
 
 const db = global.db; // Initialized in server.js
 
+function toFirestoreId(value) {
+    return String(value);
+}
+
 // ============================================================
 //  TOKENS MANAGEMENT (OAuth tokens for stylists)
 // ============================================================
@@ -14,7 +18,7 @@ const db = global.db; // Initialized in server.js
  */
 async function saveTokens(stylistId, tokens) {
     try {
-        await db.collection('tokens').doc(stylistId).set({
+        await db.collection('tokens').doc(toFirestoreId(stylistId)).set({
             ...tokens,
             updatedAt: new Date().toISOString()
         });
@@ -30,7 +34,7 @@ async function saveTokens(stylistId, tokens) {
  */
 async function getTokens(stylistId) {
     try {
-        const doc = await db.collection('tokens').doc(stylistId).get();
+        const doc = await db.collection('tokens').doc(toFirestoreId(stylistId)).get();
         return doc.exists ? doc.data() : null;
     } catch (error) {
         console.error('Error getting tokens:', error);
@@ -56,7 +60,7 @@ async function hasAuthorizedCalendar(stylistId) {
  */
 async function removeTokens(stylistId) {
     try {
-        await db.collection('tokens').doc(stylistId).delete();
+        await db.collection('tokens').doc(toFirestoreId(stylistId)).delete();
         return true;
     } catch (error) {
         console.error('Error removing tokens:', error);
@@ -73,7 +77,7 @@ async function removeTokens(stylistId) {
  */
 async function saveAppointment(appointment) {
     try {
-        const docRef = db.collection('appointments').doc(appointment.id);
+        const docRef = db.collection('appointments').doc(toFirestoreId(appointment.id));
         await docRef.set({
             ...appointment,
             updatedAt: new Date().toISOString()
@@ -106,7 +110,7 @@ async function getAppointments() {
  */
 async function getAppointmentById(id) {
     try {
-        const doc = await db.collection('appointments').doc(id).get();
+        const doc = await db.collection('appointments').doc(toFirestoreId(id)).get();
         return doc.exists ? { id: doc.id, ...doc.data() } : null;
     } catch (error) {
         console.error('Error getting appointment by ID:', error);
@@ -137,7 +141,7 @@ async function getAppointmentsByStylist(stylistId) {
  */
 async function deleteAppointment(id) {
     try {
-        await db.collection('appointments').doc(id).delete();
+        await db.collection('appointments').doc(toFirestoreId(id)).delete();
         return true;
     } catch (error) {
         console.error('Error deleting appointment:', error);
