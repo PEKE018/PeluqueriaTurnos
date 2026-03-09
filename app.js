@@ -71,6 +71,11 @@
         return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
     }
 
+    // Normalizar número de teléfono para búsquedas consistentes
+    function normalizePhone(phone) {
+        return String(phone || '').replace(/[\s\-\(\)]/g, '');
+    }
+
     function showToast(msg, type) {
         const existing = document.querySelector('.toast');
         if (existing) existing.remove();
@@ -129,8 +134,14 @@
             // Load appointments - ALWAYS sync to keep cross-device updated
             const appointmentsSnapshot = await getDocs(collection(window.db, 'appointments'));
             if (!appointmentsSnapshot.empty) {
-                const appointments = appointmentsSnapshot.docs.map(doc => doc.data());
+                let appointments = appointmentsSnapshot.docs.map(doc => doc.data());
                 if (appointments.length > 0) {
+                    // Normalizar números de teléfono para búsquedas consistentes
+                    appointments = appointments.map(apt => ({
+                        ...apt,
+                        clientPhone: normalizePhone(apt.clientPhone)
+                    }));
+                    
                     const oldAppointments = getAppointments();
                     // Check if appointments changed
                     if (JSON.stringify(oldAppointments) !== JSON.stringify(appointments)) {
@@ -161,8 +172,14 @@
             const appointmentsSnapshot = await getDocs(collection(window.db, 'appointments'));
             
             if (!appointmentsSnapshot.empty) {
-                const appointments = appointmentsSnapshot.docs.map(doc => doc.data());
+                let appointments = appointmentsSnapshot.docs.map(doc => doc.data());
                 if (appointments.length > 0) {
+                    // Normalizar números de teléfono para búsquedas consistentes
+                    appointments = appointments.map(apt => ({
+                        ...apt,
+                        clientPhone: normalizePhone(apt.clientPhone)
+                    }));
+                    
                     const oldAppointments = getAppointments();
                     // Only update if appointments changed
                     if (JSON.stringify(oldAppointments) !== JSON.stringify(appointments)) {
@@ -192,6 +209,20 @@
     let calendarDate = new Date();
     
     function initClient() {
+        // Migrate: Normalize existing phone numbers in localStorage
+        const appointments = getAppointments();
+        const hasNonNormalizedPhone = appointments.some(a => 
+            a.clientPhone && a.clientPhone !== normalizePhone(a.clientPhone)
+        );
+        if (hasNonNormalizedPhone) {
+            console.log('🔄 Normalizing phone numbers in existing appointments...');
+            const normalized = appointments.map(apt => ({
+                ...apt,
+                clientPhone: normalizePhone(apt.clientPhone)
+            }));
+            saveAppointments(normalized);
+        }
+
         const settings = getSettings();
         $('shop-name-display').textContent = settings.shopName;
         $('footer-shop-name').textContent = settings.shopName;
@@ -396,7 +427,13 @@
     function updateDateTimeTitle(stylistName) {
         const title = $('datetime-title');
         if (title) {
-            title.textContent = `Elegí fecha y hora con ${sanitize(stylistName)}`;
+            // If only one stylist, don't show the name
+            const stylists = getStylists();
+            if (stylists.length === 1) {
+                title.textContent = 'Elegí fecha y hora';
+            } else {
+                title.textContent = `Elegí fecha y hora con ${sanitize(stylistName)}`;
+            }
         }
     }
 
@@ -543,7 +580,7 @@
             id: generateId(),
             clientName: name,
             clientEmail: email,
-            clientPhone: phone,
+            clientPhone: normalizePhone(phone),  // Normalizar teléfono para búsquedas consistentes
             serviceId: bookingState.serviceId,
             serviceName: service?.name || '—',
             stylistId: bookingState.stylistId,
@@ -787,8 +824,9 @@
         // Sincronizar turnos desde Firestore antes de mostrar
         await syncAppointmentsFromFirestore();
 
+        const normalizedSearchPhone = normalizePhone(phone);
         const appointments = getAppointments().filter(a =>
-            a.clientPhone === phone && a.status !== 'cancelled'
+            normalizePhone(a.clientPhone) === normalizedSearchPhone && a.status !== 'cancelled'
         ).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 
         const container = $('my-bookings-result');
@@ -819,13 +857,13 @@
         
         if (!apt) return;
         
-        // Validar 48 horas de anticipación
+        // Validar 3 horas de anticipación
         const appointmentDateTime = new Date(apt.date + 'T' + apt.time);
         const now = new Date();
         const hoursUntilAppointment = (appointmentDateTime - now) / (1000 * 60 * 60);
         
-        if (hoursUntilAppointment < 48) {
-            showToast('No se puede cancelar turnos con menos de 48 horas de anticipación', 'error');
+        if (hoursUntilAppointment < 3) {
+            showToast('No se puede cancelar turnos con menos de 3 horas de anticipación', 'error');
             return;
         }
         
@@ -988,16 +1026,24 @@
     
     function populateAvailabilityStylistDropdown() {
         const select = $('availability-stylist');
+        const container = $('availability-stylist-container');
         if (!select) return;
         
         const stylists = getStylists();
-        const options = [`<option value="">Seleccioná un profesional</option>`];
         
-        stylists.forEach(s => {
-            options.push(`<option value="${s.id}">${sanitize(s.name)}</option>`);
-        });
-        
-        select.innerHTML = options.join('');
+        // If only one stylist, hide the dropdown and auto-select
+        if (stylists.length === 1) {
+            container.classList.add('hidden');
+            select.value = stylists[0].id;
+            window.renderAvailabilityCalendar();
+        } else {
+            container.classList.remove('hidden');
+            const options = [`<option value="">Seleccioná un profesional</option>`];
+            stylists.forEach(s => {
+                options.push(`<option value="${s.id}">${sanitize(s.name)}</option>`);
+            });
+            select.innerHTML = options.join('');
+        }
     }
 
     // ---------- TABS ----------
