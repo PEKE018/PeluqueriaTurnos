@@ -76,6 +76,24 @@
         return String(phone || '').replace(/[\s\-\(\)]/g, '');
     }
 
+    // Update UI elements when settings change (e.g., shop name from another device)
+    function updateSettingsUI(settings) {
+        // Update shop name in header (visible to all)
+        if (settings.shopName) {
+            const shopNameDisplay = $('shop-name-display');
+            const footerShopName = $('footer-shop-name');
+            if (shopNameDisplay) shopNameDisplay.textContent = sanitize(settings.shopName);
+            if (footerShopName) footerShopName.textContent = sanitize(settings.shopName);
+            document.title = sanitize(settings.shopName) + ' — Turnos';
+        }
+        
+        // Update admin panel form if it's open
+        const shopNameField = $('setting-shop-name');
+        if (shopNameField && shopNameField.value !== settings.shopName) {
+            shopNameField.value = settings.shopName || '';
+        }
+    }
+
     function showToast(msg, type) {
         const existing = document.querySelector('.toast');
         if (existing) existing.remove();
@@ -124,11 +142,24 @@
                 }
             }
             
-            // Load settings
+            // Load settings - ALWAYS sync to keep cross-device updated
             const settingsSnapshot = await getDocs(collection(window.db, 'settings'));
             if (!settingsSnapshot.empty) {
-                const settings = settingsSnapshot.docs.map(doc => doc.data());
-                if (settings.length > 0) saveSettingsData(settings[0]);
+                const firestoreSettings = settingsSnapshot.docs.map(doc => doc.data());
+                if (firestoreSettings.length > 0) {
+                    const oldSettings = getSettings();
+                    // Check if settings changed
+                    if (JSON.stringify(oldSettings) !== JSON.stringify(firestoreSettings[0])) {
+                        console.log('🔄 Settings updated from Firestore');
+                        saveSettingsData(firestoreSettings[0]);
+                        // Update UI elements that display settings
+                        updateSettingsUI(firestoreSettings[0]);
+                        dataChanged = true;
+                    } else {
+                        // Even if settings haven't changed, update UI on first load
+                        updateSettingsUI(firestoreSettings[0]);
+                    }
+                }
             }
             
             // Load appointments - ALWAYS sync to keep cross-device updated
@@ -1568,9 +1599,32 @@
 
         if (workingDays.length === 0) { showToast('Seleccioná al menos un día laboral', 'error'); return; }
 
-        saveSettingsData({ shopName, adminPassword, openTime, closeTime, intervalMinutes, workingDays });
-        showToast('Configuración guardada', 'success');
+        const settings = { shopName, adminPassword, openTime, closeTime, intervalMinutes, workingDays };
+        
+        // Save to localStorage first (instant)
+        saveSettingsData(settings);
+        
+        // Save to Firestore (async, for cross-device sync)
+        saveSettingsToFirestore(settings).then(() => {
+            showToast('Configuración guardada y sincronizada', 'success');
+        }).catch(err => {
+            showToast('Configuración guardada localmente (sincronización pendiente)', 'warning');
+            console.log('Firestore sync error:', err.message);
+        });
     };
+
+    async function saveSettingsToFirestore(settings) {
+        if (!window.db) return;
+        
+        try {
+            const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+            await setDoc(doc(window.db, 'settings', 'config'), settings);
+            console.log('✅ Settings saved to Firestore');
+        } catch (error) {
+            console.error('Error saving settings to Firestore:', error);
+            throw error;
+        }
+    }
 
     // ---------- EMAIL INTEGRATION SETTINGS ----------
     window.saveEmailJSSettings = function () {
