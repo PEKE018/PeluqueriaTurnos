@@ -672,8 +672,50 @@
         goToStep('step-service');
     };
 
+    // ===== NAVIGATION HISTORY =====
+    let navigationHistory = ['step-service']; // Track navigation for back button
+    
+    // Handle browser back button
+    window.addEventListener('popstate', (event) => {
+        console.log('📍 popstate event triggered, state:', event.state);
+        
+        if (event.state && event.state.stepId) {
+            // Navigate back to the previous step
+            const previousStep = event.state.stepId;
+            navigationHistory = navigationHistory.filter(s => s !== previousStep);
+            
+            // Hide all steps and show the one from history
+            document.querySelectorAll('#app-client .step').forEach(s => s.classList.add('hidden'));
+            const stepElement = $(previousStep);
+            if (stepElement) {
+                stepElement.classList.remove('hidden');
+                
+                // Re-render if needed
+                if (previousStep === 'step-datetime') {
+                    renderCalendar();
+                }
+            }
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    });
+    
     window.goToStep = function (stepId) {
         console.log('📍 goToStep llamado:', stepId);
+        
+        // Add to navigation history
+        if (!navigationHistory.includes(stepId)) {
+            navigationHistory.push(stepId);
+        }
+        
+        // Update browser history
+        window.history.pushState(
+            { stepId: stepId },
+            `Turnos - ${stepId}`,
+            `?step=${stepId}`
+        );
+        
+        // Hide all steps and show the target step
         document.querySelectorAll('#app-client .step').forEach(s => s.classList.add('hidden'));
         $(stepId).classList.remove('hidden');
         
@@ -685,25 +727,40 @@
             renderCalendar();
         }
         
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        console.log('📍 Nueva URL:', window.location.href);
     };
 
     // Smart back button from datetime step - skips stylist selection if only one stylist
     window.goBackFromDateTime = function () {
-        const activeStylists = getStylists().filter(s => s.active);
-        
-        if (activeStylists.length === 1) {
-            // Only one stylist, go back to service selection
-            // Reset title
-            const title = $('datetime-title');
-            if (title) {
-                title.textContent = 'Elegí fecha y hora';
-            }
-            goToStep('step-service');
+        // Try to go back in browser history first
+        if (navigationHistory.length > 1) {
+            window.history.back();
         } else {
-            // Multiple stylists, go back to stylist selection
-            renderStylists();
-            goToStep('step-stylist');
+            // Fallback if history is empty
+            const activeStylists = getStylists().filter(s => s.active);
+            
+            if (activeStylists.length === 1) {
+                // Only one stylist, go back to service selection
+                const title = $('datetime-title');
+                if (title) {
+                    title.textContent = 'Elegí fecha y hora';
+                }
+                goToStep('step-service');
+            } else {
+                // Multiple stylists, go back to stylist selection
+                renderStylists();
+                goToStep('step-stylist');
+            }
+        }
+    };
+    
+    // Generic back button handler
+    window.goBack = function () {
+        if (navigationHistory.length > 1) {
+            window.history.back();
+        } else {
+            // Fallback - go to first step
+            goToStep('step-service');
         }
     };
 
