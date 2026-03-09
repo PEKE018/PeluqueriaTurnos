@@ -13,7 +13,7 @@ const { getTokens, saveTokens } = require('../utils/db');
  * Helper: Get authenticated client for stylist
  */
 async function getAuthClientForStylist(stylistId) {
-    let tokens = getTokens(stylistId);
+    let tokens = await getTokens(stylistId);
     
     if (!tokens) {
         throw new Error('Stylist has not authorized calendar access');
@@ -23,7 +23,7 @@ async function getAuthClientForStylist(stylistId) {
     if (tokens.expiry_date && tokens.expiry_date < Date.now()) {
         console.log('Token expired, refreshing...');
         tokens = await refreshAccessToken(tokens.refresh_token);
-        saveTokens(stylistId, tokens);
+        await saveTokens(stylistId, tokens);
     }
     
     return setCredentials(tokens);

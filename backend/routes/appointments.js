@@ -17,25 +17,37 @@ const {
 const { getTokens, saveTokens } = require('../utils/db');
 
 /**
+ * Validate email format
+ */
+function isValidEmail(email) {
+    if (!email) return true; // Email es opcional
+    
+    // Regex mejorado para validación de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+}
+
+/**
  * Helper: Create calendar event for appointment
  */
 async function createAppointmentCalendarEvent(appointment) {
     const { stylistId, date, time, duration = 30 } = appointment;
     
     // Check if stylist has authorized calendar
-    if (!hasAuthorizedCalendar(stylistId)) {
+    const hasAuth = await hasAuthorizedCalendar(stylistId);
+    if (!hasAuth) {
         console.log(`Stylist ${stylistId} has not authorized calendar - skipping event creation`);
         return null;
     }
     
     try {
         // Get tokens and create auth client
-        let tokens = getTokens(stylistId);
+        let tokens = await getTokens(stylistId);
         
         // Refresh token if expired
         if (tokens.expiry_date && tokens.expiry_date < Date.now()) {
             tokens = await refreshAccessToken(tokens.refresh_token);
-            saveTokens(stylistId, tokens);
+            await saveTokens(stylistId, tokens);
         }
         
         const auth = setCredentials(tokens);
@@ -44,22 +56,29 @@ async function createAppointmentCalendarEvent(appointment) {
         const [year, month, day] = date.split('-');
         const [hours, minutes] = time.split(':');
         
-        // Create start datetime
-        const startDate = new Date(year, month - 1, day, hours, minutes);
+        // Create datetime string in local format (NOT ISO string)
+        // Format: YYYY-MM-DDTHH:mm:ss
+        const startDateTime = `${year}-${month}-${day}T${hours}:${minutes}:00`;
         
-        // Calculate end datetime
+        // Calculate end time
+        const startDate = new Date(year, month - 1, day, parseInt(hours), parseInt(minutes));
         const endDate = new Date(startDate.getTime() + duration * 60000);
+        const endHours = String(endDate.getHours()).padStart(2, '0');
+        const endMinutes = String(endDate.getMinutes()).padStart(2, '0');
+        const endDateTime = `${year}-${month}-${day}T${endHours}:${endMinutes}:00`;
         
-        // Format for Google Calendar (ISO 8601)
-        const startDateTime = startDate.toISOString();
-        const endDateTime = endDate.toISOString();
-        
-        // Prepare event details
+        // Prepare event details with timezone
         const eventDetails = {
             summary: `${appointment.serviceName} - ${appointment.clientName}`,
             description: `Cliente: ${appointment.clientName}\nTeléfono: ${appointment.clientPhone}\nEmail: ${appointment.clientEmail || 'No especificado'}\nServicio: ${appointment.serviceName}\nPrecio: $${appointment.price}`,
-            startDateTime,
-            endDateTime,
+            start: {
+                dateTime: startDateTime,
+                timeZone: 'America/Argentina/Buenos_Aires'
+            },
+            end: {
+                dateTime: endDateTime,
+                timeZone: 'America/Argentina/Buenos_Aires'
+            },
             attendees: appointment.clientEmail ? [{ email: appointment.clientEmail }] : []
         };
         
@@ -92,6 +111,14 @@ router.post('/', async (req, res) => {
         });
     }
     
+    // Validate email format if provided
+    if (appointmentData.clientEmail && !isValidEmail(appointmentData.clientEmail)) {
+        return res.status(400).json({ 
+            error: 'Invalid email format',
+            email: appointmentData.clientEmail
+        });
+    }
+    
     try {
         // Generate appointment ID
         const appointment = {
@@ -109,8 +136,8 @@ router.post('/', async (req, res) => {
             appointment.calendarEventId = eventId;
         }
         
-        // Save appointment
-        saveAppointment(appointment);
+        // Save appointment (now async)
+        await saveAppointment(appointment);
         
         res.json({ 
             success: true,
@@ -134,23 +161,33 @@ router.post('/', async (req, res) => {
  * GET /api/appointments
  * Get all appointments
  */
-router.get('/', (req, res) => {
-    const appointments = getAppointments();
-    res.json(appointments);
+router.get('/', async (req, res) => {
+    try {
+        const appointments = await getAppointments();
+        res.json(appointments);
+    } catch (error) {
+        console.error('Error getting appointments:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 /**
  * GET /api/appointments/:id
  * Get appointment by ID
  */
-router.get('/:id', (req, res) => {
-    const appointment = getAppointmentById(req.params.id);
-    
-    if (!appointment) {
-        return res.status(404).json({ error: 'Appointment not found' });
+router.get('/:id', async (req, res) => {
+    try {
+        const appointment = await getAppointmentById(req.params.id);
+        
+        if (!appointment) {
+            return res.status(404).json({ error: 'Appointment not found' });
+        }
+        
+        res.json(appointment);
+    } catch (error) {
+        console.error('Error getting appointment:', error);
+        res.status(500).json({ error: error.message });
     }
-    
-    res.json(appointment);
 });
 
 /**
@@ -159,44 +196,53 @@ router.get('/:id', (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
     const { id } = req.params;
-    const appointment = getAppointmentById(id);
-    
-    if (!appointment) {
-        return res.status(404).json({ error: 'Appointment not found' });
-    }
     
     try {
+        const appointment = await getAppointmentById(id);
+        
+        if (!appointment) {
+            return res.status(404).json({ error: 'Appointment not found' });
+        }
+        
         // Delete from calendar if event exists
-        if (appointment.calendarEventId && hasAuthorizedCalendar(appointment.stylistId)) {
-            let tokens = getTokens(appointment.stylistId);
-            
-            if (tokens.expiry_date && tokens.expiry_date < Date.now()) {
-                tokens = await refreshAccessToken(tokens.refresh_token);
-                saveTokens(appointment.stylistId, tokens);
+        if (appointment.calendarEventId && await hasAuthorizedCalendar(appointment.stylistId)) {
+            try {
+                let tokens = await getTokens(appointment.stylistId);
+                
+                if (tokens && tokens.expiry_date && tokens.expiry_date < Date.now()) {
+                    tokens = await refreshAccessToken(tokens.refresh_token);
+                    await saveTokens(appointment.stylistId, tokens);
+                }
+                
+                if (tokens) {
+                    const auth = setCredentials(tokens);
+                    await deleteCalendarEvent(auth, appointment.calendarEventId);
+                    console.log(`✅ Calendar event deleted: ${appointment.calendarEventId}`);
+                }
+            } catch (calendarError) {
+                console.error('Error deleting calendar event:', calendarError);
+                // Continue with database deletion even if calendar fails
             }
-            
-            const auth = setCredentials(tokens);
-            await deleteCalendarEvent(auth, appointment.calendarEventId);
-            console.log(`✅ Calendar event deleted: ${appointment.calendarEventId}`);
         }
         
         // Delete from database
-        deleteAppointment(id);
+        const deleted = await deleteAppointment(id);
         
-        res.json({ 
-            success: true,
-            message: 'Appointment cancelled and removed from calendar'
-        });
+        if (deleted) {
+            return res.json({ 
+                success: true,
+                message: 'Appointment cancelled and removed'
+            });
+        } else {
+            return res.status(500).json({
+                error: 'Failed to delete appointment'
+            });
+        }
         
     } catch (error) {
         console.error('Error cancelling appointment:', error);
-        
-        // Still delete from database even if calendar deletion fails
-        deleteAppointment(id);
-        
-        res.json({ 
-            success: true,
-            warning: 'Appointment cancelled but calendar event may not have been deleted',
+        return res.status(500).json({ 
+            error: 'Internal server error',
             message: error.message
         });
     }

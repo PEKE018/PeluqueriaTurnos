@@ -83,6 +83,62 @@
 
     const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
+    // ---------- FIRESTORE SYNC ----------
+    async function loadFromFirestore() {
+        try {
+            if (!window.db) return; // Firestore not available
+            
+            const { getDocs, collection } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+            
+            // Load services
+            const servicesSnapshot = await getDocs(collection(window.db, 'services'));
+            if (!servicesSnapshot.empty) {
+                const services = servicesSnapshot.docs.map(doc => doc.data());
+                if (services.length > 0) saveServices(services);
+            }
+            
+            // Load stylists
+            const stylistsSnapshot = await getDocs(collection(window.db, 'stylists'));
+            if (!stylistsSnapshot.empty) {
+                const stylists = stylistsSnapshot.docs.map(doc => doc.data());
+                if (stylists.length > 0) saveStylists(stylists);
+            }
+            
+            // Load settings
+            const settingsSnapshot = await getDocs(collection(window.db, 'settings'));
+            if (!settingsSnapshot.empty) {
+                const settings = settingsSnapshot.docs.map(doc => doc.data());
+                if (settings.length > 0) saveSettingsData(settings[0]);
+            }
+            
+            // Load appointments
+            const appointmentsSnapshot = await getDocs(collection(window.db, 'appointments'));
+            if (!appointmentsSnapshot.empty) {
+                const appointments = appointmentsSnapshot.docs.map(doc => doc.data());
+                if (appointments.length > 0) saveAppointments(appointments);
+            }
+        } catch (error) {
+            console.log('Firestore sync not available, using localStorage cache');
+        }
+    }
+
+    // Sincronizar solo appointments desde Firestore (para búsquedas por teléfono)
+    async function syncAppointmentsFromFirestore() {
+        try {
+            if (!window.db) return;
+            
+            const { getDocs, collection } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+            const appointmentsSnapshot = await getDocs(collection(window.db, 'appointments'));
+            
+            if (!appointmentsSnapshot.empty) {
+                const appointments = appointmentsSnapshot.docs.map(doc => doc.data());
+                if (appointments.length > 0) saveAppointments(appointments);
+            }
+        } catch (error) {
+            console.log('Could not sync appointments from Firestore:', error.message);
+        }
+    }
+
     // ---------- BOOKING STATE ----------
     let bookingState = {
         serviceId: null,
@@ -468,20 +524,26 @@
         saveAppointments(appointments);
 
         // Send to backend (Google Calendar integration)
+        let calendarCreated = false;
+        let backendError = null;
+        
         try {
             const response = await fetch(`${BACKEND_URL}/api/appointments`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(appointment)
+                body: JSON.stringify(appointment),
+                timeout: 10000 // 10 segundo timeout
             });
 
             if (response.ok) {
                 const result = await response.json();
-                console.log('✅ Turno creado en Google Calendar:', result);
+                console.log('✅ Turno sincronizado con Google Calendar:', result);
                 
-                // Update appointment with calendar event ID
+                calendarCreated = result.calendarCreated || false;
+                
+                // Update appointment with calendar event ID if available
                 if (result.appointment && result.appointment.calendarEventId) {
                     const index = appointments.findIndex(a => a.id === appointment.id);
                     if (index >= 0) {
@@ -489,16 +551,48 @@
                         saveAppointments(appointments);
                     }
                 }
+                
+                // Mostrar advertencia si el calendario no se sincronizó pero el turno sí
+                if (!calendarCreated) {
+                    console.warn('⚠️ Turno creado pero no sincronizado a Google Calendar');
+                }
             } else {
-                console.warn('Backend no disponible, turno guardado solo localmente');
+                const errorData = await response.json().catch(() => ({}));
+                const errorMsg = errorData.error || `Error ${response.status}: ${response.statusText}`;
+                backendError = errorMsg;
+                console.error('Backend error:', errorMsg);
             }
         } catch (error) {
-            console.warn('No se pudo conectar con el backend:', error);
-            // Continue anyway - appointment is saved locally
+            backendError = `No se puede conectar con el servidor: ${error.message}`;
+            console.error('Network error:', error);
         }
 
         // Show confirmation FIRST
         console.log('📝 Preparando detalles de confirmación...');
+        
+        let confirmationMessage = '';
+        if (backendError) {
+            confirmationMessage = `
+                <p style="margin-top:1rem;padding:1rem;background:rgba(255,107,107,0.1);border-radius:8px;font-size:0.9rem;border-left:4px solid #ff6b6b;">
+                    ⚠️ <strong>Importante:</strong> El turno fue guardado, pero no se pudo sincronizar con Google Calendar del profesional.
+                    <br><small>Error: ${sanitize(backendError)}</small>
+                    <br>El profesional será notificado manualmente.
+                </p>
+            `;
+        } else if (calendarCreated) {
+            confirmationMessage = `
+                <p style="margin-top:1rem;padding:1rem;background:rgba(212,160,36,0.1);border-radius:8px;font-size:0.9rem;">
+                    ✅ Turno confirmado y sincronizado automáticamente al Google Calendar del profesional.
+                </p>
+            `;
+        } else {
+            confirmationMessage = `
+                <p style="margin-top:1rem;padding:1rem;background:rgba(255,193,7,0.1);border-radius:8px;font-size:0.9rem;border-left:4px solid #ffc107;">
+                    ℹ️ Turno confirmado. El profesional aún no ha conectado su Google Calendar, así que será notificado manualmente.
+                </p>
+            `;
+        }
+        
         $('confirmation-details').innerHTML = `
             <p><strong>Servicio:</strong> ${sanitize(appointment.serviceName)}</p>
             <p><strong>Profesional:</strong> ${sanitize(appointment.stylistName)}</p>
@@ -508,14 +602,18 @@
             <p><strong>Cliente:</strong> ${sanitize(appointment.clientName)}</p>
             <p><strong>Email:</strong> ${sanitize(appointment.clientEmail)}</p>
             <p><strong>Teléfono:</strong> ${sanitize(appointment.clientPhone)}</p>
-            <p style="margin-top:1rem;padding:1rem;background:rgba(212,160,36,0.1);border-radius:8px;font-size:0.9rem;">
-                ✅ Turno confirmado y agregado automáticamente al Google Calendar del profesional.
-            </p>
+            ${confirmationMessage}
         `;
 
         console.log('✅ Mostrando pantalla de confirmación');
         goToStep('step-confirmation');
-        showToast('¡Turno reservado con éxito!', 'success');
+        
+        // Mostrar advertencia visual si hay error
+        if (backendError) {
+            showToast('⚠️ Turno guardado pero con problemas: ' + backendError, 'warning');
+        } else {
+            showToast('¡Turno reservado con éxito!', 'success');
+        }
         
         // Reset flag after showing confirmation
         isConfirming = false;
@@ -588,9 +686,12 @@
     };
 
     // ---------- CHECK MY BOOKINGS ----------
-    window.checkMyBookings = function () {
+    window.checkMyBookings = async function () {
         const phone = $('check-phone').value.trim();
         if (!phone) { showToast('Ingresá tu teléfono', 'error'); return; }
+
+        // Sincronizar turnos desde Firestore antes de mostrar
+        await syncAppointmentsFromFirestore();
 
         const appointments = getAppointments().filter(a =>
             a.clientPhone === phone && a.status !== 'cancelled'
@@ -618,7 +719,7 @@
         }).join('');
     };
 
-    window.cancelMyBooking = function (id) {
+    window.cancelMyBooking = async function (id) {
         const appointments = getAppointments();
         const apt = appointments.find(a => a.id === id);
         
@@ -636,10 +737,27 @@
         
         if (!confirm('¿Seguro que querés cancelar este turno?')) return;
         
-        apt.status = 'cancelled';
-        saveAppointments(appointments);
-        showToast('Turno cancelado', 'success');
-        window.checkMyBookings();
+        try {
+            // Call backend to delete appointment and calendar event
+            const backendUrl = getBackendURL();
+            const response = await fetch(`${backendUrl}/api/appointments/${apt.id}`, {
+                method: 'DELETE'
+            });
+            
+            if (!response.ok) {
+                throw new Error('No se pudo cancelar el turno');
+            }
+            
+            // Remove from local list
+            appointments = appointments.filter(a => a.id !== apt.id);
+            saveAppointments(appointments);
+            
+            showToast('Turno cancelado', 'success');
+            window.checkMyBookings();
+        } catch (error) {
+            showToast('Error al cancelar: ' + error.message, 'error');
+            console.error('Error cancelling appointment:', error);
+        }
     };
 
     function statusLabel(status) {
@@ -721,34 +839,27 @@
     // Contador de clicks para configuración técnica
     let logoutClickCount = 0;
     let logoutClickTimer = null;
-    let technicalConfigShown = false;
 
     window.handleLogoutClick = function () {
         logoutClickCount++;
         
-        // Si el modal de config técnica está abierto, cerrar y hacer logout
-        if (technicalConfigShown) {
-            window.adminLogout();
+        // Resetear contador después de 3 segundos sin clicks
+        clearTimeout(logoutClickTimer);
+        logoutClickTimer = setTimeout(() => {
+            logoutClickCount = 0;
+        }, 3000);
+
+        // Si llega a 5 clicks, mostrar configuración técnica
+        if (logoutClickCount === 5) {
+            logoutClickCount = 0;
+            showTechnicalConfig();
             return;
         }
 
-        // Resetear contador después de 2 segundos sin clicks
-        clearTimeout(logoutClickTimer);
-        logoutClickTimer = setTimeout(() => {
-            // Si no llegó a 5 clicks, hacer logout normal
-            if (logoutClickCount < 5) {
-                window.adminLogout();
-            } else {
-                // Si llegó a 5 clicks, mostrar config técnica
-                technicalConfigShown = true;
-                showTechnicalConfig();
-            }
+        // Si llega a 6 clicks (después de ver la config), hacer logout
+        if (logoutClickCount === 6) {
             logoutClickCount = 0;
-        }, 2000);
-
-        // Visual feedback: si llega a 5 clicks rápido, prepara para mostrar config
-        if (logoutClickCount === 5) {
-            clearTimeout(logoutClickTimer);
+            window.adminLogout();
         }
     };
 
@@ -767,10 +878,6 @@
 
     window.closeModal = function (id) {
         $(id).classList.add('hidden');
-        // Resetear estado si cerraron el modal de configuración técnica
-        if (id === 'technical-config-modal') {
-            technicalConfigShown = false;
-        }
     };
 
     // ============================================================
@@ -1252,30 +1359,38 @@
     // ---------- SETTINGS ----------
     function loadSettingsForm() {
         const s = getSettings();
-        $('setting-shop-name').value = s.shopName;
-        $('setting-password').value = s.adminPassword;
-        $('setting-open-time').value = s.openTime;
-        $('setting-close-time').value = s.closeTime;
-        $('setting-interval').value = s.intervalMinutes;
+        const shopNameEl = $('setting-shop-name');
+        const passwordEl = $('setting-password');
+        const openTimeEl = $('setting-open-time');
+        const closeTimeEl = $('setting-close-time');
+        const intervalEl = $('setting-interval');
+
+        if (shopNameEl) shopNameEl.value = s.shopName;
+        if (passwordEl) passwordEl.value = s.adminPassword;
+        if (openTimeEl) openTimeEl.value = s.openTime;
+        if (closeTimeEl) closeTimeEl.value = s.closeTime;
+        if (intervalEl) intervalEl.value = s.intervalMinutes;
 
         // Working days checkboxes
         const container = $('working-days-checks');
-        container.innerHTML = DAY_NAMES.map((name, i) => `
-            <label class="day-check">
-                <input type="checkbox" value="${i}" ${s.workingDays.includes(i) ? 'checked' : ''}>
-                <span>${name}</span>
-            </label>
-        `).join('');
+        if (container) {
+            container.innerHTML = DAY_NAMES.map((name, i) => `
+                <label class="day-check">
+                    <input type="checkbox" value="${i}" ${s.workingDays.includes(i) ? 'checked' : ''}>
+                    <span>${name}</span>
+                </label>
+            `).join('');
+        }
 
         // Load EmailJS config
         const emailConfig = getEmailJSConfig();
-        $('emailjs-service-id').value = emailConfig.serviceId || '';
-        $('emailjs-template-id').value = emailConfig.templateId || '';
-        $('emailjs-public-key').value = emailConfig.publicKey || '';
+        const emailServiceEl = $('emailjs-service-id');
+        const emailTemplateEl = $('emailjs-template-id');
+        const emailPublicEl = $('emailjs-public-key');
         
-        // Load Backend URL config
-        const backendUrl = getBackendURL();
-        $('backend-url').value = backendUrl || '';
+        if (emailServiceEl) emailServiceEl.value = emailConfig.serviceId || '';
+        if (emailTemplateEl) emailTemplateEl.value = emailConfig.templateId || '';
+        if (emailPublicEl) emailPublicEl.value = emailConfig.publicKey || '';
     }
 
     window.saveSettings = function () {
@@ -1361,33 +1476,11 @@
     };
 
     // ---------- BACKEND INTEGRATION SETTINGS ----------
-    window.saveBackendSettings = function () {
-        const backendUrl = $('backend-url').value.trim();
-        
-        if (!backendUrl) {
-            showToast('Ingresá la URL del servidor backend', 'error');
-            return;
-        }
-        
-        // Validate URL format
-        try {
-            new URL(backendUrl);
-        } catch (error) {
-            showToast('URL inválida. Ejemplo: http://localhost:3000 o https://tubackend.com', 'error');
-            return;
-        }
-        
-        saveBackendURL(backendUrl);
-        showToast('URL del backend guardada correctamente', 'success');
-    };
+    // Backend URL está configurada en BACKEND_URL (línea ~10)
+    // No se necesita configurar desde el admin panel
 
     window.testBackendConnection = async function () {
-        const backendUrl = $('backend-url').value.trim();
-        
-        if (!backendUrl) {
-            showToast('Primero guardá la URL del backend', 'error');
-            return;
-        }
+        const backendUrl = getBackendURL();
         
         showToast('Probando conexión...', 'info');
         
@@ -1398,6 +1491,24 @@
         } else {
             showToast('Error: ' + result.message, 'error');
         }
+    };
+
+    window.clearAllAppointments = function() {
+        if (!confirm('⚠️ ADVERTENCIA: Esta acción eliminará TODOS los turnos de la peluquería.\n\n¿Estás seguro de continuar?')) {
+            return;
+        }
+        if (!confirm('Esta es la ÚLTIMA oportunidad para cancelar. Se perderán todos los datos de turnos. ¿Continuar?')) {
+            return;
+        }
+        
+        // Clear from localStorage
+        saveAppointments([]);
+        
+        // Show success message
+        showToast('✓ Todos los turnos han sido eliminados', 'success');
+        
+        // Refresh admin view
+        renderAdminAppointments();
     };
 
     // ============================================================
@@ -1576,12 +1687,9 @@
     }
 
     // Helper functions for Backend Config
-    function saveBackendURL(url) {
-        setData('backend_url', url);
-    }
-
     function getBackendURL() {
-        return getData('backend_url', '') || BACKEND_URL;
+        // Backend URL está hardcodeada en BACKEND_URL (línea ~10)
+        return BACKEND_URL;
     }
 
     function saveGoogleOAuthConfig(clientId, redirectUri) {
@@ -1919,12 +2027,15 @@
     //  INIT
     // ============================================================
 
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
         // Initialize EmailJS if configured
         const emailConfig = getEmailJSConfig();
         if (emailConfig.publicKey && typeof emailjs !== 'undefined') {
             emailjs.init(emailConfig.publicKey);
         }
+        
+        // Load data from Firestore before initializing client
+        await loadFromFirestore();
         
         initClient();
     });

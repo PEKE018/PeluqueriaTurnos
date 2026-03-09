@@ -10,6 +10,26 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- EmailJS for calendar invitations -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <!-- Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDDa_aEn984z8TeqkAkc5qA2vRungInTxc",
+            authDomain: "mostaza-peluqueria.firebaseapp.com",
+            projectId: "mostaza-peluqueria",
+            storageBucket: "mostaza-peluqueria.firebasestorage.app",
+            messagingSenderId: "731126368958",
+            appId: "1:731126368958:web:a67cc103f9539dd1ab6cef",
+            measurementId: "G-5X9VVJGBRC"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        window.db = getFirestore(app);
+        window.auth = getAuth(app);
+    </script>
 </head>
 <body>
 
@@ -195,14 +215,18 @@
 <div id="app-admin" class="hidden">
 
     <header class="header admin-header">
-        <div class="admin-header-content">
-            <div class="admin-logo">
-                <img src="LogoSF.png" alt="Logo" class="logo-img-admin">
-                <span class="admin-badge-text">Admin</span>
-            </div>
-            <h1>Panel de Administración</h1>
+        <div class="admin-header-logo">
+            <img src="LogoSF.png" alt="Logo" class="logo-img-admin">
         </div>
-        <button class="btn-logout" id="btn-logout-main" onclick="handleLogoutClick()">Cerrar sesión</button>
+        <div class="admin-header-center">
+            <h1>Panel de Administración</h1>
+            <p class="admin-subtitle">Mostaza Peluquería</p>
+        </div>
+        <button class="btn-logout-icon" id="btn-logout-main" onclick="handleLogoutClick()" title="Cerrar sesión">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+            </svg>
+        </button>
     </header>
 
     <nav class="admin-nav">
@@ -219,10 +243,13 @@
         <section class="admin-tab-content" id="tab-appointments">
             <div class="admin-section-header">
                 <h2>Gestión de Turnos</h2>
-                <div class="filter-row">
-                    <label>Filtrar por fecha:</label>
-                    <input type="date" id="filter-date" class="input-field input-sm" onchange="renderAdminAppointments()">
-                    <button class="btn-secondary btn-sm" onclick="clearFilterDate()">Todos</button>
+                <div class="filter-row" style="display: flex; gap: 1rem; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <label>Filtrar por fecha:</label>
+                        <input type="date" id="filter-date" class="input-field input-sm" onchange="renderAdminAppointments()">
+                        <button class="btn-secondary btn-sm" onclick="clearFilterDate()">Todos</button>
+                    </div>
+                    <button class="btn-danger btn-sm" onclick="clearAllAppointments()" style="margin-left: auto;" title="Vaciar toda la gestión de turnos">Vaciar Turnos</button>
                 </div>
             </div>
             <div class="table-wrapper">
@@ -234,13 +261,18 @@
                             <th>Cliente</th>
                             <th>Teléfono</th>
                             <th>Servicio</th>
-                            <th>Profesional</th>
+                            <th>rofesional</th>
                             <th>Estado</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="appointments-tbody"></tbody>
                 </table>
+            </div>
+            <div class="pagination-controls">
+                <button class="btn-pagination" onclick="prevPage('appointments')">← Anterior</button>
+                <span id="appointments-page-info" class="page-info"></span>
+                <button class="btn-pagination" onclick="nextPage('appointments')">Siguiente →</button>
             </div>
         </section>
 
@@ -295,7 +327,14 @@
                 Bloqueá días completos o horarios específicos. Los clientes verán estos espacios como no disponibles.
             </p>
             
-            <div class="form-group" style="max-width: 400px; margin-bottom: 2rem;">
+            <div id="no-stylists-message" class="hidden" style="background: var(--surface-secondary); padding: 1.5rem; border-radius: 8px; border-left: 4px solid var(--warning); margin-bottom: 2rem;">
+                <p style="margin: 0; color: var(--text-secondary);">
+                    ⚠️ Primero necesitas crear un profesional. 
+                    <button class="link-btn" onclick="document.querySelector('[data-tab=tab-stylists]').click()" style="color: var(--primary); text-decoration: underline; background: none; border: none; cursor: pointer; font-size: inherit; padding: 0;">🔧 Ir a la sección de Profesionales</button>
+                </p>
+            </div>
+            
+            <div id="availability-stylist-container" class="form-group" style="max-width: 400px; margin-bottom: 2rem;">
                 <label for="availability-stylist">Profesional</label>
                 <select id="availability-stylist" class="input-field" onchange="renderAvailabilityCalendar()">
                     <option value="">Seleccioná un profesional</option>
@@ -372,25 +411,11 @@
                     <strong>El profesional NO debe modificar estos valores durante el uso normal del sistema.</strong>
                 </div>
 
-                <h2 style="margin-top: 2rem;">Backend & Google Calendar API</h2>
+                <h2 style="margin-top: 2rem;">🗑️ Limpieza de Datos</h2>
                 <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
-                    Configurá la URL del servidor backend para integración automática con Google Calendar.
-                    Los profesionales deben autorizar sus cuentas desde la pestaña "Profesionales".
+                    Elimina todos los turnos registrados en la base de datos. Esta acción no se puede deshacer.
                 </p>
-                <div class="settings-form">
-                    <div class="form-group">
-                        <label for="backend-url">URL del Backend</label>
-                        <input type="text" id="backend-url" class="input-field" 
-                               placeholder="http://localhost:3000 o https://tubackend.com" 
-                               maxlength="200">
-                        <small style="display: block; margin-top: 0.5rem; color: var(--text-muted);">
-                            Para desarrollo local: http://localhost:3000<br>
-                            Para producción: URL de tu servidor desplegado (Railway, Render, Heroku, etc.)
-                        </small>
-                    </div>
-                    <button class="btn-primary" onclick="saveBackendSettings()">Guardar URL Backend</button>
-                    <button class="btn-secondary" onclick="testBackendConnection()" style="margin-left: 0.5rem;">Probar Conexión</button>
-                </div>
+                <button class="btn-danger" onclick="clearAllAppointments()">🗑️ Eliminar Todos los Turnos</button>
             </div>
             <!-- FIN SECCIÓN TÉCNICA -->
         </section>

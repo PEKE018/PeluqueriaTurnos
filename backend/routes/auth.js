@@ -29,7 +29,7 @@ router.get('/google/callback', async (req, res) => {
         const tokens = await getTokensFromCode(code);
         
         // Save tokens for this stylist
-        saveTokens(stylistId, tokens);
+        await saveTokens(stylistId, tokens);
         
         console.log(`✅ Calendar authorized for stylist ${stylistId}`);
         
@@ -84,35 +84,60 @@ router.get('/google/:stylistId', (req, res) => {
  * GET /auth/status/:stylistId
  * Check if a stylist has authorized their calendar
  */
-router.get('/status/:stylistId', (req, res) => {
+router.get('/status/:stylistId', async (req, res) => {
     const { stylistId } = req.params;
-    const { hasAuthorizedCalendar } = require('../utils/db');
     
-    const isAuthorized = hasAuthorizedCalendar(stylistId);
+    if (!stylistId) {
+        return res.status(400).json({ error: 'stylistId is required' });
+    }
     
-    res.json({ 
-        stylistId,
-        authorized: isAuthorized,
-        message: isAuthorized 
-            ? 'Calendar is connected' 
-            : 'Calendar not connected yet'
-    });
+    try {
+        const { hasAuthorizedCalendar } = require('../utils/db');
+        const isAuthorized = await hasAuthorizedCalendar(stylistId);
+        
+        res.json({ 
+            stylistId,
+            authorized: isAuthorized,
+            message: isAuthorized 
+                ? 'Calendar is connected' 
+                : 'Calendar not connected yet'
+        });
+    } catch (error) {
+        console.error('Error checking authorization status:', error);
+        res.status(500).json({ 
+            error: 'Failed to check authorization status',
+            message: error.message 
+        });
+    }
 });
 
 /**
  * DELETE /auth/disconnect/:stylistId
  * Disconnect stylist's Google Calendar
  */
-router.delete('/disconnect/:stylistId', (req, res) => {
+router.delete('/disconnect/:stylistId', async (req, res) => {
     const { stylistId } = req.params;
-    const { removeTokens } = require('../utils/db');
     
-    removeTokens(stylistId);
+    if (!stylistId) {
+        return res.status(400).json({ error: 'stylistId is required' });
+    }
     
-    res.json({ 
-        message: 'Calendar disconnected successfully',
-        stylistId
-    });
+    try {
+        const { removeTokens } = require('../utils/db');
+        const success = await removeTokens(stylistId);
+        
+        res.json({ 
+            success: true,
+            message: 'Calendar disconnected successfully',
+            stylistId
+        });
+    } catch (error) {
+        console.error('Error disconnecting calendar:', error);
+        res.status(500).json({ 
+            error: 'Failed to disconnect calendar',
+            message: error.message 
+        });
+    }
 });
 
 module.exports = router;
