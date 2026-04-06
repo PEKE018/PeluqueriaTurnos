@@ -94,4 +94,17 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📅 Google Calendar API integration enabled`);
     console.log(`🌐 Frontend: ${process.env.FRONTEND_URL}`);
+
+    // Keep-alive: ping propio cada 14 min para evitar que Render duerma el servicio
+    if (process.env.NODE_ENV === 'production') {
+        const https = require('https');
+        const selfUrl = process.env.RENDER_EXTERNAL_URL || `https://peluqueriaturnos.onrender.com`;
+        setInterval(() => {
+            https.get(`${selfUrl}/health`, (res) => {
+                console.log(`🏓 Keep-alive ping: ${res.statusCode}`);
+            }).on('error', (e) => {
+                console.warn('Keep-alive ping failed:', e.message);
+            });
+        }, 14 * 60 * 1000); // cada 14 minutos
+    }
 });

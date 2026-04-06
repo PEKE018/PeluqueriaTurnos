@@ -17,6 +17,8 @@
         openTime: '09:00',
         closeTime: '20:00',
         intervalMinutes: 30,
+        minBookingNoticeHours: 2,
+        minCancellationNoticeHours: 3,
         workingDays: [1, 2, 3, 4, 5, 6] // 0=Dom,1=Lun...6=Sáb
     };
 
@@ -67,7 +69,12 @@
         await batch.commit();
     }
 
-    function getSettings() { return getData('settings', DEFAULT_SETTINGS); }
+    function getSettings() {
+        return {
+            ...DEFAULT_SETTINGS,
+            ...getData('settings', {})
+        };
+    }
     function saveSettingsData(s) { setData('settings', s); }
     function getServices() { return getData('services', DEFAULT_SERVICES); }
     function saveServices(s, options) {
@@ -122,6 +129,60 @@
 
     function generateId() {
         return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    }
+
+    function getAppointmentDateTime(dateStr, timeStr) {
+        return new Date(`${dateStr}T${timeStr}:00`);
+    }
+
+    function getMinBookingNoticeHours(settings = getSettings()) {
+        const value = Number(settings.minBookingNoticeHours);
+        return Number.isFinite(value) && value >= 0 ? value : DEFAULT_SETTINGS.minBookingNoticeHours;
+    }
+
+    function getMinCancellationNoticeHours(settings = getSettings()) {
+        const value = Number(settings.minCancellationNoticeHours);
+        return Number.isFinite(value) && value >= 0 ? value : DEFAULT_SETTINGS.minCancellationNoticeHours;
+    }
+
+    function getMinimumBookableDateTime(settings = getSettings()) {
+        return new Date(Date.now() + getMinBookingNoticeHours(settings) * 60 * 60 * 1000);
+    }
+
+    function canBookAppointment(dateStr, timeStr, settings = getSettings()) {
+        const appointmentDateTime = getAppointmentDateTime(dateStr, timeStr);
+
+        if (Number.isNaN(appointmentDateTime.getTime())) {
+            return false;
+        }
+
+        return appointmentDateTime.getTime() >= getMinimumBookableDateTime(settings).getTime();
+    }
+
+    function canCancelAppointment(dateStr, timeStr, settings = getSettings()) {
+        const appointmentDateTime = getAppointmentDateTime(dateStr, timeStr);
+        const now = new Date();
+        const minutesUntil = (appointmentDateTime.getTime() - now.getTime()) / (1000 * 60);
+        return minutesUntil >= getMinCancellationNoticeHours(settings) * 60;
+    }
+
+    function getBookingNoticeMessage(settings = getSettings()) {
+        const hours = getMinBookingNoticeHours(settings);
+        const label = hours === 1 ? 'hora' : 'horas';
+        return `Las reservas deben realizarse con al menos ${hours} ${label} de anticipación`;
+    }
+
+    function getCancellationNoticeMessage(settings = getSettings()) {
+        const hours = getMinCancellationNoticeHours(settings);
+        const label = hours === 1 ? 'hora' : 'horas';
+        return `No se puede cancelar turnos con menos de ${hours} ${label} de anticipación`;
+    }
+
+    function updateBookingNoticeUI(settings = getSettings()) {
+        const bookingNotice = $('booking-notice');
+        if (bookingNotice) {
+            bookingNotice.textContent = `${getBookingNoticeMessage(settings)}`;
+        }
     }
 
     // Normalizar número de teléfono para búsquedas consistentes
@@ -202,10 +263,14 @@
     }
 
     function syncSettingsFromRemote(settings) {
-        const nextSettings = settings || DEFAULT_SETTINGS;
+        const nextSettings = {
+            ...DEFAULT_SETTINGS,
+            ...(settings || {})
+        };
         const oldSettings = getSettings();
 
         updateSettingsUI(nextSettings);
+        updateBookingNoticeUI(nextSettings);
 
         if (isSameData(oldSettings, nextSettings)) {
             if ($('working-days-checks')) loadSettingsForm();
@@ -385,6 +450,7 @@
         $('footer-shop-name').textContent = settings.shopName;
         $('footer-year').textContent = new Date().getFullYear();
         document.title = settings.shopName + ' — Turnos';
+        updateBookingNoticeUI(settings);
 
         // Initialize custom calendar
         const today = new Date().toISOString().split('T')[0];
@@ -639,21 +705,16 @@
         );
         const bookedTimes = new Set(appointments.map(a => a.time));
 
-        // Check if date is today — disable past times
-        const now = new Date();
-        const isToday = dateStr === now.toISOString().split('T')[0];
-        const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
         let slots = [];
         for (let m = openMinutes; m < closeMinutes; m += interval) {
             const hh = String(Math.floor(m / 60)).padStart(2, '0');
             const mm = String(m % 60).padStart(2, '0');
             const timeStr = hh + ':' + mm;
 
-            const isPast = isToday && m <= currentMinutes;
+            const isTooSoon = !canBookAppointment(dateStr, timeStr, settings);
             const isBooked = bookedTimes.has(timeStr);
             const isBlocked = blockedTimes.has(timeStr);
-            const isAvailable = !isPast && !isBooked && !isBlocked;
+            const isAvailable = !isTooSoon && !isBooked && !isBlocked;
 
             slots.push({ time: timeStr, available: isAvailable });
         }
@@ -715,6 +776,15 @@
         if (!phone) { isConfirming = false; showToast('Ingresá tu teléfono', 'error'); return; }
 
         // Double-check slot is still available
+        const settings = getSettings();
+        if (!canBookAppointment(bookingState.date, bookingState.time, settings)) {
+            isConfirming = false;
+            showToast(getBookingNoticeMessage(settings), 'error');
+            goToStep('step-datetime');
+            renderTimeSlots();
+            return;
+        }
+
         const appointments = getAppointments();
         const conflict = appointments.find(a =>
             a.date === bookingState.date &&
@@ -771,7 +841,7 @@
             }
 
             const result = await response.json();
-            console.log('✅ Turno sincronizado con backend:', result);
+            console.log('Turno sincronizado con backend:', result);
 
             calendarCreated = result.calendarCreated || false;
             savedAppointment = result.appointment || appointment;
@@ -797,13 +867,13 @@
         if (calendarCreated) {
             confirmationMessage = `
                 <p style="margin-top:1rem;padding:1rem;background:rgba(212,160,36,0.1);border-radius:8px;font-size:0.9rem;">
-                    ✅ Turno confirmado y sincronizado automáticamente al Google Calendar del profesional.
+                    Turno confirmado y sincronizado automáticamente al Google Calendar del profesional.
                 </p>
             `;
         } else {
             confirmationMessage = `
                 <p style="margin-top:1rem;padding:1rem;background:rgba(255,193,7,0.1);border-radius:8px;font-size:0.9rem;border-left:4px solid #ffc107;">
-                    ℹ️ Turno confirmado. El profesional aún no ha conectado su Google Calendar, así que será notificado manualmente.
+                    Turno confirmado. El profesional aún no ha conectado su Google Calendar, así que será notificado manualmente.
                 </p>
             `;
         }
@@ -820,14 +890,14 @@
             ${confirmationMessage}
         `;
 
-        console.log('✅ Mostrando pantalla de confirmación');
+        console.log('Mostrando pantalla de confirmación');
         goToStep('step-confirmation');
         
         showToast('¡Turno reservado con éxito!', 'success');
         
         // Reset flag after showing confirmation
         isConfirming = false;
-        console.log('✅ Confirmación completada, flag reseteado');
+        console.log('Confirmación completada, flag reseteado');
         
         // Send calendar invitations AFTER showing confirmation (asynchronous)
         setTimeout(() => {
@@ -995,13 +1065,9 @@
         
         if (!apt) return;
         
-        // Validar 3 horas de anticipación
-        const appointmentDateTime = new Date(apt.date + 'T' + apt.time);
-        const now = new Date();
-        const hoursUntilAppointment = (appointmentDateTime - now) / (1000 * 60 * 60);
-        
-        if (hoursUntilAppointment < 3) {
-            showToast('No se puede cancelar turnos con menos de 3 horas de anticipación', 'error');
+        const settings = getSettings();
+        if (!canCancelAppointment(apt.date, apt.time, settings)) {
+            showToast(getCancellationNoticeMessage(settings), 'error');
             return;
         }
         
@@ -1143,7 +1209,7 @@
         // Show success message
         showToast('Sesión cerrada correctamente', 'success');
         
-        console.log('✅ Admin logout completed');
+        console.log('Admin logout completed');
     };
 
     window.closeModal = function (id) {
@@ -1285,7 +1351,7 @@
                 </td>
                 <td>${s.duration} min</td>
                 <td>${formatPrice(s.price)}</td>
-                <td>${s.image ? '✓ Imagen' : '—'}</td>
+                <td>${s.image ? 'Imagen' : '—'}</td>
                 <td class="actions">
                     <button class="btn-warning" onclick="editService(${s.id})">Editar</button>
                     <button class="btn-danger" onclick="deleteService(${s.id})">Eliminar</button>
@@ -1449,48 +1515,31 @@
             return;
         }
         
-        // Check authorization status for each stylist
-        stylists.forEach(async (s) => {
-            try {
-                const backendUrl = getBackendURL();
-                const response = await fetch(`${backendUrl}/auth/status/${s.id}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    s.calendarConnected = data.authorized;
-                    s.calendarEmail = data.email;
-                }
-            } catch (error) {
-                s.calendarConnected = false;
-            }
-        });
-        
         tbody.innerHTML = stylists.map(s => `
             <tr>
                 <td>${sanitize(s.name)}</td>
                 <td>${s.email ? sanitize(s.email) : '<span style="color:var(--text-muted);font-style:italic">Sin email</span>'}</td>
                 <td><span class="badge ${s.active ? 'badge-confirmed' : 'badge-cancelled'}">${s.active ? 'Activo' : 'Inactivo'}</span></td>
                 <td>
-                    <span id="calendar-status-${s.id}" class="badge ${s.calendarConnected ? 'badge-confirmed' : 'badge-pending'}">
-                        ${s.calendarConnected ? '✓ Google Calendar conectado' : '⚠ Sin conectar'}
+                    <span id="calendar-status-${s.id}" class="badge badge-pending">
+                        Verificando...
                     </span>
-                    ${s.calendarConnected && s.calendarEmail ? `<br><small style="color:var(--text-muted)">${sanitize(s.calendarEmail)}</small>` : ''}
                 </td>
                 <td class="actions">
                     <div class="actions-grid">
                         <button class="btn-action btn-warning" onclick="editStylist(${s.id})">Editar</button>
                         <button class="btn-action btn-secondary" onclick="toggleStylist(${s.id})">${s.active ? 'Desactivar' : 'Activar'}</button>
-                        ${!s.calendarConnected ? 
-                            `<button class="btn-action btn-success" onclick="connectStylistCalendar(${s.id})">📅 Conectar Calendario</button>` : 
-                            `<button class="btn-action btn-danger-alt" onclick="disconnectStylistCalendar(${s.id})">🔌 Desconectar</button>`
-                        }
+                        <div id="calendar-btn-${s.id}">
+                            <button class="btn-action btn-success" onclick="connectStylistCalendar(${s.id})">📅 Conectar Calendario</button>
+                        </div>
                         <button class="btn-action btn-danger" onclick="deleteStylist(${s.id})">Eliminar</button>
                     </div>
                 </td>
             </tr>
         `).join('');
         
-        // Update status after initial render
-        setTimeout(() => updateCalendarStatus(), 1000);
+        // Fetch and update calendar status asynchronously (updates both badge and button)
+        updateCalendarStatus();
     }
 
     window.showStylistForm = function (stylist) {
@@ -1593,10 +1642,9 @@
             const checkInterval = setInterval(async () => {
                 if (!authWindow || authWindow.closed) {
                     clearInterval(checkInterval);
-                    // Wait a bit and check status
+                    // Wait a bit then update status (badge + button) without full re-render
                     setTimeout(async () => {
                         await updateCalendarStatus();
-                        renderAdminStylists();
                         showToast('Verificando estado de conexión...', 'info');
                     }, 1000);
                 }
@@ -1624,7 +1672,6 @@
             }
             
             await updateCalendarStatus();
-            renderAdminStylists();
             showToast('Calendario desconectado', 'success');
             
         } catch (error) {
@@ -1645,11 +1692,22 @@
                     const statusEl = document.getElementById(`calendar-status-${stylist.id}`);
                     if (statusEl) {
                         statusEl.className = `badge ${data.authorized ? 'badge-confirmed' : 'badge-pending'}`;
-                        statusEl.textContent = data.authorized ? '✓ Google Calendar conectado' : '⚠ Sin conectar';
+                        statusEl.textContent = data.authorized ? 'Google Calendar conectado' : 'Sin conectar';
+                    }
+                    const btnEl = document.getElementById(`calendar-btn-${stylist.id}`);
+                    if (btnEl) {
+                        btnEl.innerHTML = data.authorized
+                            ? `<button class="btn-action btn-danger-alt" onclick="disconnectStylistCalendar(${stylist.id})">🔌 Desconectar</button>`
+                            : `<button class="btn-action btn-success" onclick="connectStylistCalendar(${stylist.id})">📅 Conectar Calendario</button>`;
                     }
                 }
             } catch (error) {
                 console.warn(`Could not check calendar status for stylist ${stylist.id}:`, error);
+                const statusEl = document.getElementById(`calendar-status-${stylist.id}`);
+                if (statusEl) {
+                    statusEl.className = 'badge badge-pending';
+                    statusEl.textContent = 'Sin conectar';
+                }
             }
         }
     }
@@ -1662,12 +1720,16 @@
         const openTimeEl = $('setting-open-time');
         const closeTimeEl = $('setting-close-time');
         const intervalEl = $('setting-interval');
+        const minBookingNoticeEl = $('setting-min-booking-notice');
+        const minCancellationNoticeEl = $('setting-min-cancellation-notice');
 
         if (shopNameEl) shopNameEl.value = s.shopName;
         if (passwordEl) passwordEl.value = s.adminPassword;
         if (openTimeEl) openTimeEl.value = s.openTime;
         if (closeTimeEl) closeTimeEl.value = s.closeTime;
         if (intervalEl) intervalEl.value = s.intervalMinutes;
+        if (minBookingNoticeEl) minBookingNoticeEl.value = getMinBookingNoticeHours(s);
+        if (minCancellationNoticeEl) minCancellationNoticeEl.value = getMinCancellationNoticeHours(s);
 
         // Working days checkboxes
         const container = $('working-days-checks');
@@ -1697,12 +1759,22 @@
         const openTime = $('setting-open-time').value;
         const closeTime = $('setting-close-time').value;
         const intervalMinutes = parseInt($('setting-interval').value, 10);
+        const minBookingNoticeHours = parseInt($('setting-min-booking-notice').value, 10);
+        const minCancellationNoticeHours = parseInt($('setting-min-cancellation-notice').value, 10);
 
         if (!shopName) { showToast('Ingresá el nombre del local', 'error'); return; }
         if (!adminPassword) { showToast('Ingresá una contraseña', 'error'); return; }
         if (!openTime || !closeTime) { showToast('Ingresá horarios de apertura y cierre', 'error'); return; }
         if (openTime >= closeTime) { showToast('La hora de apertura debe ser antes del cierre', 'error'); return; }
         if (!intervalMinutes || intervalMinutes < 10) { showToast('Intervalo mínimo: 10 minutos', 'error'); return; }
+        if (!Number.isInteger(minBookingNoticeHours) || minBookingNoticeHours < 0) {
+            showToast('La anticipación mínima debe ser 0 o más horas', 'error');
+            return;
+        }
+        if (!Number.isInteger(minCancellationNoticeHours) || minCancellationNoticeHours < 0) {
+            showToast('La anticipación mínima para cancelar debe ser 0 o más horas', 'error');
+            return;
+        }
 
         const workingDays = [];
         document.querySelectorAll('#working-days-checks input:checked').forEach(cb => {
@@ -1711,10 +1783,20 @@
 
         if (workingDays.length === 0) { showToast('Seleccioná al menos un día laboral', 'error'); return; }
 
-        const settings = { shopName, adminPassword, openTime, closeTime, intervalMinutes, workingDays };
+        const settings = {
+            shopName,
+            adminPassword,
+            openTime,
+            closeTime,
+            intervalMinutes,
+            minBookingNoticeHours,
+            minCancellationNoticeHours,
+            workingDays
+        };
         
         // Save to localStorage first (instant)
         saveSettingsData(settings);
+        updateBookingNoticeUI(settings);
         
         // Save to Firestore (async, for cross-device sync)
         saveSettingsToFirestore(settings).then(() => {
@@ -1731,7 +1813,7 @@
         try {
             const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
             await setDoc(doc(window.db, 'settings', 'config'), settings);
-            console.log('✅ Settings saved to Firestore');
+            console.log('Settings saved to Firestore');
         } catch (error) {
             console.error('Error saving settings to Firestore:', error);
             throw error;
@@ -1788,7 +1870,7 @@
 
         emailjs.send(serviceId, templateId, testParams, publicKey)
             .then(
-                () => showToast('✓ Conexión exitosa con EmailJS', 'success'),
+                () => showToast('Conexión exitosa con EmailJS', 'success'),
                 (error) => {
                     console.error('Error en test de EmailJS:', error);
                     showToast('Error: ' + (error.text || 'Verificá tus credenciales'), 'error');
@@ -1808,14 +1890,14 @@
         const result = await checkBackendHealth(backendUrl);
         
         if (result.success) {
-            showToast('✓ Conexión exitosa con el servidor backend', 'success');
+            showToast('Conexión exitosa con el servidor backend', 'success');
         } else {
             showToast('Error: ' + result.message, 'error');
         }
     };
 
     window.clearAllAppointments = function() {
-        if (!confirm('⚠️ ADVERTENCIA: Esta acción eliminará TODOS los turnos de la peluquería.\n\n¿Estás seguro de continuar?')) {
+        if (!confirm('ADVERTENCIA: Esta acción eliminará TODOS los turnos de la peluquería.\n\n¿Estás seguro de continuar?')) {
             return;
         }
         if (!confirm('Esta es la ÚLTIMA oportunidad para cancelar. Se perderán todos los datos de turnos. ¿Continuar?')) {
@@ -1826,7 +1908,7 @@
         saveAppointments([]);
         
         // Show success message
-        showToast('✓ Todos los turnos han sido eliminados', 'success');
+        showToast('Todos los turnos han sido eliminados', 'success');
         
         // Refresh admin view
         renderAdminAppointments();
@@ -2165,7 +2247,7 @@
         
         if (dayBlock) {
             // Day is fully blocked - show option to unblock
-            $('admin-time-slots').innerHTML = '<p style="text-align:center; color:var(--danger); font-weight:600;">⚠️ Este día está completamente bloqueado</p>';
+            $('admin-time-slots').innerHTML = '<p style="text-align:center; color:var(--danger); font-weight:600;">Este día está completamente bloqueado</p>';
         } else {
             // Show time slots
             renderAdminTimeSlots(dateStr);
@@ -2316,7 +2398,7 @@
         const html = blocks.map(block => {
             const displayText = block.fullDay 
                 ? '🚫 Día completo bloqueado' 
-                : `⏰ ${block.blockedTimes.length} horario(s) bloqueado(s)`;
+                : `${block.blockedTimes.length} horario(s) bloqueado(s)`;
             
             return `
                 <div class="block-item" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
