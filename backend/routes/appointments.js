@@ -251,13 +251,13 @@ router.delete('/:id', async (req, res) => {
         }
         
         // Delete from calendar if event exists
-        if (appointment.calendarEventId && await hasAuthorizedCalendar(appointment.stylistId)) {
+        if (appointment.calendarEventId && await hasAuthorizedCalendar(TOKEN_KEY)) {
             try {
-                let tokens = await getTokens(appointment.stylistId);
+                let tokens = await getTokens(TOKEN_KEY);
                 
                 if (tokens && tokens.expiry_date && tokens.expiry_date < Date.now()) {
                     tokens = await refreshAccessToken(tokens.refresh_token);
-                    await saveTokens(appointment.stylistId, tokens);
+                    await saveTokens(TOKEN_KEY, tokens);
                 }
                 
                 if (tokens) {
