@@ -9,11 +9,14 @@ const {
 } = require('../utils/googleAuth');
 const { getTokens, saveTokens } = require('../utils/db');
 
+// Clave fija para el único profesional
+const TOKEN_KEY = process.env.PRIMARY_STYLIST_KEY || 'mostaza-primary';
+
 /**
- * Helper: Get authenticated client for stylist
+ * Helper: Get authenticated client (always uses fixed token key)
  */
 async function getAuthClientForStylist(stylistId) {
-    let tokens = await getTokens(stylistId);
+    let tokens = await getTokens(TOKEN_KEY);
     
     if (!tokens) {
         throw new Error('Stylist has not authorized calendar access');
@@ -23,7 +26,7 @@ async function getAuthClientForStylist(stylistId) {
     if (tokens.expiry_date && tokens.expiry_date < Date.now()) {
         console.log('Token expired, refreshing...');
         tokens = await refreshAccessToken(tokens.refresh_token);
-        await saveTokens(stylistId, tokens);
+        await saveTokens(TOKEN_KEY, tokens);
     }
     
     return setCredentials(tokens);

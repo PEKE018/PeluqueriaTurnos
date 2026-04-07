@@ -7,6 +7,11 @@ const {
 } = require('../utils/googleAuth');
 const { saveTokens } = require('../utils/db');
 
+// Clave fija para el único profesional. Los tokens siempre se guardan bajo
+// esta clave, independientemente del ID numérico del frontend, para evitar
+// pérdidas cuando el profesional se borra y recrea.
+const TOKEN_KEY = process.env.PRIMARY_STYLIST_KEY || 'mostaza-primary';
+
 /**
  * GET /auth/google/callback
  * OAuth callback - receives authorization code and exchanges for tokens
@@ -28,10 +33,10 @@ router.get('/google/callback', async (req, res) => {
         // Exchange code for tokens
         const tokens = await getTokensFromCode(code);
         
-        // Save tokens for this stylist
-        await saveTokens(stylistId, tokens);
+        // Save tokens under fixed key (independent of frontend numeric ID)
+        await saveTokens(TOKEN_KEY, tokens);
         
-        console.log(`✅ Calendar authorized for stylist ${stylistId}`);
+        console.log(`✅ Calendar authorized, stored under key: ${TOKEN_KEY}`);
         
         // Redirect to frontend with success message
         // Support both local development and production
@@ -93,7 +98,7 @@ router.get('/status/:stylistId', async (req, res) => {
     
     try {
         const { hasAuthorizedCalendar } = require('../utils/db');
-        const isAuthorized = await hasAuthorizedCalendar(stylistId);
+        const isAuthorized = await hasAuthorizedCalendar(TOKEN_KEY);
         
         res.json({ 
             stylistId,
@@ -124,7 +129,7 @@ router.delete('/disconnect/:stylistId', async (req, res) => {
     
     try {
         const { removeTokens } = require('../utils/db');
-        const success = await removeTokens(stylistId);
+        const success = await removeTokens(TOKEN_KEY);
         
         res.json({ 
             success: true,

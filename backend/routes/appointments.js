@@ -1,12 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
+
+// Clave fija para el único profesional
+const TOKEN_KEY = process.env.PRIMARY_STYLIST_KEY || 'mostaza-primary';
 const { 
     saveAppointment, 
     getAppointments, 
     getAppointmentById,
     deleteAppointment,
-    hasAuthorizedCalendar 
+    hasAuthorizedCalendar,
+    getSettings
 } = require('../utils/db');
 const { 
     setCredentials,
@@ -27,25 +31,34 @@ function isValidEmail(email) {
     return emailRegex.test(email);
 }
 
+function getMinBookingNoticeHours(settings) {
+    const value = Number(settings?.minBookingNoticeHours);
+    return Number.isFinite(value) && value >= 0 ? value : 2;
+}
+
+function getAppointmentDateTime(date, time) {
+    return new Date(`${date}T${time}:00`);
+}
+
 /**
  * Helper: Create calendar event for appointment
  */
 async function createAppointmentCalendarEvent(appointment) {
-    const { stylistId, date, time, duration = 30 } = appointment;
+    const { date, time, duration = 30 } = appointment;
     
-    // Check if stylist has authorized calendar
-    const hasAuth = await hasAuthorizedCalendar(stylistId);
+    // Check if stylist has authorized calendar (always using fixed key)
+    const hasAuth = await hasAuthorizedCalendar(TOKEN_KEY);
     if (!hasAuth) {
-        console.log(`Stylist ${stylistId} has not authorized calendar - skipping event creation`);
+        console.log(`Calendar not authorized (key: ${TOKEN_KEY}) - skipping event creation`);
         return null;
     }
     
     try {
         // Get tokens and create auth client
-        let tokens = await getTokens(stylistId);
+        let tokens = await getTokens(TOKEN_KEY);
         
         if (!tokens) {
-            console.log(`No tokens found for stylist ${stylistId}`);
+            console.log(`No tokens found (key: ${TOKEN_KEY})`);
             return null;
         }
         
@@ -53,7 +66,7 @@ async function createAppointmentCalendarEvent(appointment) {
         if (tokens.expiry_date && tokens.expiry_date < Date.now()) {
             console.log('Token expired, refreshing...');
             tokens = await refreshAccessToken(tokens.refresh_token);
-            await saveTokens(stylistId, tokens);
+            await saveTokens(TOKEN_KEY, tokens);
         }
         
         const auth = setCredentials(tokens);
@@ -136,6 +149,23 @@ router.post('/', async (req, res) => {
     }
     
     try {
+        const settings = await getSettings();
+        const minBookingNoticeHours = getMinBookingNoticeHours(settings);
+        const appointmentDateTime = getAppointmentDateTime(appointmentData.date, appointmentData.time);
+
+        if (Number.isNaN(appointmentDateTime.getTime())) {
+            return res.status(400).json({
+                error: 'Fecha u hora inválida'
+            });
+        }
+
+        const minimumBookableDate = new Date(Date.now() + minBookingNoticeHours * 60 * 60 * 1000);
+        if (appointmentDateTime.getTime() < minimumBookableDate.getTime()) {
+            return res.status(400).json({
+                error: `No se pueden reservar turnos con menos de ${minBookingNoticeHours} horas de anticipación`
+            });
+        }
+
         // Generate appointment ID
         const appointment = {
             id: appointmentData.id || uuidv4(),
