@@ -69,6 +69,9 @@
         <!-- Paso 3: Fecha y hora -->
         <section class="step hidden" id="step-datetime">
             <h2 class="step-title" id="datetime-title">Elegí fecha y hora</h2>
+            <p class="info-text" id="booking-notice" style="margin-bottom: 1rem; color: var(--text-muted); font-size: 0.9rem;">
+                Las reservas deben realizarse con al menos 2 horas de anticipación
+            </p>
             
             <!-- Calendario Personalizado -->
             <div class="custom-calendar">
@@ -132,7 +135,7 @@
         <section class="check-booking-section">
             <h3>¿Ya tenés un turno?</h3>
             <p class="info-text" style="margin-top: 0.5rem; color: var(--text-muted); font-size: 0.9rem;">
-                ℹ️ Las cancelaciones deben realizarse con al menos 3 horas de anticipación
+                Las cancelaciones deben realizarse con al menos 3 horas de anticipación
             </p>
             <div class="form-group">
                 <input type="tel" id="check-phone" class="input-field" placeholder="Ingresá tu teléfono" maxlength="20">
@@ -329,8 +332,8 @@
             
             <div id="no-stylists-message" class="hidden" style="background: var(--surface-secondary); padding: 1.5rem; border-radius: 8px; border-left: 4px solid var(--warning); margin-bottom: 2rem;">
                 <p style="margin: 0; color: var(--text-secondary);">
-                    ⚠️ Primero necesitas crear un profesional. 
-                    <button class="link-btn" onclick="document.querySelector('[data-tab=tab-stylists]').click()" style="color: var(--primary); text-decoration: underline; background: none; border: none; cursor: pointer; font-size: inherit; padding: 0;">🔧 Ir a la sección de Profesionales</button>
+                    Primero necesitas crear un profesional. 
+                    <button class="link-btn" onclick="document.querySelector('[data-tab=tab-stylists]').click()" style="color: var(--primary); text-decoration: underline; background: none; border: none; cursor: pointer; font-size: inherit; padding: 0;">Ir a la sección de Profesionales</button>
                 </p>
             </div>
             
@@ -371,51 +374,88 @@
 
         <!-- Tab: Configuración -->
         <section class="admin-tab-content hidden" id="tab-settings">
-            <h2>Configuración General</h2>
+            <h2>Configuración General del Negocio</h2>
             <div class="settings-form">
-                <div class="form-group">
-                    <label for="setting-shop-name">Nombre del local</label>
-                    <input type="text" id="setting-shop-name" class="input-field" maxlength="100">
+                
+                <!-- Sección 1: Información del Negocio -->
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <h3>Información del Negocio</h3>
+                    </div>
+                    <div class="form-group">
+                        <label for="setting-shop-name">Nombre del local</label>
+                        <input type="text" id="setting-shop-name" class="input-field" maxlength="100">
+                    </div>
+                    <div class="form-group">
+                        <label for="setting-password">Contraseña de administración</label>
+                        <input type="password" id="setting-password" class="input-field" maxlength="50">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="setting-password">Contraseña de administración</label>
-                    <input type="password" id="setting-password" class="input-field" maxlength="50">
+
+                <!-- Sección 2: Horarios de Atención -->
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <h3>Horarios de Atención</h3>
+                    </div>
+                    <div class="settings-row-two">
+                        <div class="form-group">
+                            <label for="setting-open-time">Hora de apertura</label>
+                            <input type="time" id="setting-open-time" class="input-field">
+                        </div>
+                        <div class="form-group">
+                            <label for="setting-close-time">Hora de cierre</label>
+                            <input type="time" id="setting-close-time" class="input-field">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="setting-interval">Intervalo de turnos (minutos)</label>
+                        <input type="number" id="setting-interval" class="input-field" min="10" max="120" step="5">
+                        <small style="color: var(--text-muted); display: block; margin-top: 0.35rem;">Tiempo mínimo entre cada reserva (ej: 30 min = máximo 2 clientes/hora).</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Días laborales</label>
+                        <div class="days-checkboxes" id="working-days-checks"></div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="setting-open-time">Hora de apertura</label>
-                    <input type="time" id="setting-open-time" class="input-field">
+
+                <!-- Sección 3: Políticas de Reserva -->
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <h3>Políticas de Reserva</h3>
+                    </div>
+                    <div class="settings-row-two">
+                        <div class="form-group">
+                            <label for="setting-min-booking-notice">Anticipación mínima<br><small style="font-weight: normal; color: var(--text-muted);">(para reservar)</small></label>
+                            <input type="number" id="setting-min-booking-notice" class="input-field" min="0" max="168" step="1">
+                            <small style="color: var(--text-muted); display: block; margin-top: 0.35rem;">Los clientes solo podrán reservar con esta anticipación.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="setting-min-cancellation-notice">Anticipación mínima<br><small style="font-weight: normal; color: var(--text-muted);">(para cancelar)</small></label>
+                            <input type="number" id="setting-min-cancellation-notice" class="input-field" min="0" max="168" step="1">
+                            <small style="color: var(--text-muted); display: block; margin-top: 0.35rem;">Plazo mínimo para cancelar sin penalidad.</small>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="setting-close-time">Hora de cierre</label>
-                    <input type="time" id="setting-close-time" class="input-field">
-                </div>
-                <div class="form-group">
-                    <label for="setting-interval">Intervalo de turnos (minutos)</label>
-                    <input type="number" id="setting-interval" class="input-field" min="10" max="120" step="5">
-                </div>
-                <div class="form-group">
-                    <label>Días laborales</label>
-                    <div class="days-checkboxes" id="working-days-checks"></div>
-                </div>
+
                 <button class="btn-primary btn-settings-save" onclick="saveSettings()">Guardar Configuración</button>
             </div>
 
             <!-- SECCIÓN TÉCNICA (Solo Desarrollo) -->
             <div class="technical-section hidden" id="technical-section">
                 <div class="technical-header">
-                    <h2>⚙️ CONFIGURACIÓN TÉCNICA</h2>
+                    <h2>CONFIGURACIÓN TÉCNICA</h2>
                 </div>
                 <div class="technical-warning">
-                    <strong>⚠️ Solo para Desarrollo / Programador</strong>
+                    <strong>Solo para Desarrollo / Programador</strong>
                     Esta sección contiene configuraciones técnicas que deben realizarse una sola vez durante la instalación inicial.
                     <strong>El profesional NO debe modificar estos valores durante el uso normal del sistema.</strong>
                 </div>
 
-                <h2 style="margin-top: 2rem;">🗑️ Limpieza de Datos</h2>
+                <h2 style="margin-top: 2rem;">Limpieza de Datos</h2>
                 <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
                     Elimina todos los turnos registrados en la base de datos. Esta acción no se puede deshacer.
                 </p>
-                <button class="btn-danger" onclick="clearAllAppointments()">🗑️ Eliminar Todos los Turnos</button>
+                <button class="btn-danger" onclick="clearAllAppointments()">Eliminar Todos los Turnos</button>
             </div>
             <!-- FIN SECCIÓN TÉCNICA -->
         </section>

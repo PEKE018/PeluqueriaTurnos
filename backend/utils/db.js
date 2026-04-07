@@ -137,6 +137,19 @@ async function getAppointmentsByStylist(stylistId) {
 }
 
 /**
+ * Get business settings
+ */
+async function getSettings() {
+    try {
+        const doc = await db.collection('settings').doc('config').get();
+        return doc.exists ? doc.data() : {};
+    } catch (error) {
+        console.error('Error getting settings:', error);
+        return {};
+    }
+}
+
+/**
  * Delete appointment
  */
 async function deleteAppointment(id) {
@@ -161,5 +174,6 @@ module.exports = {
     getAppointments,
     getAppointmentById,
     getAppointmentsByStylist,
-    deleteAppointment
+    deleteAppointment,
+    getSettings
 };
